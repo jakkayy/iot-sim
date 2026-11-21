@@ -14,7 +14,8 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@esp32-sim/runtime-micropython": "workspace:*"
+    "@esp32-sim/runtime-micropython": "workspace:*",
+    "@esp32-sim/runtime-arduino": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -26,14 +26,16 @@ export default function SimPage() {
 
   const [log, setLog] = useState<string[]>([]);
 
-  const run = (lang: "js" | "py") => {
+  const run = (lang: "js" | "py" | "ino") => {
     const buffer = createPinBuffer();
     pinsRef.current = new PinState(buffer);
     setLog([]);
     const worker =
       lang === "py"
         ? new Worker(new URL("./micropython.worker.ts", import.meta.url))
-        : new Worker(new URL("./blink.worker.ts", import.meta.url));
+        : lang === "ino"
+          ? new Worker(new URL("./arduino.worker.ts", import.meta.url))
+          : new Worker(new URL("./blink.worker.ts", import.meta.url));
     worker.onmessage = (e: MessageEvent<{ type: string; line?: string; message?: string }>) => {
       const text = e.data.line ?? e.data.message ?? "";
       setLog((l) => [...l, `[${e.data.type}] ${text}`]);
@@ -43,6 +45,7 @@ export default function SimPage() {
       buffer,
       wasmUrl: abs("/micropython/micropython.wasm"),
       loaderUrl: abs("/micropython/micropython.mjs"),
+      sketchUrl: abs("/arduino/blink.wasm"),
     });
     workerRef.current = worker;
     setRunning(true);
@@ -67,6 +70,7 @@ export default function SimPage() {
       />
       <button onClick={() => run("js")} disabled={running || !isolated}>Run JS</button>{" "}
       <button onClick={() => run("py")} disabled={running || !isolated}>Run MicroPython</button>{" "}
+      <button onClick={() => run("ino")} disabled={running || !isolated}>Run Arduino</button>{" "}
       <button onClick={stop} disabled={!running}>Stop</button>
       <pre data-testid="log">{log.join("\n")}</pre>
     </main>

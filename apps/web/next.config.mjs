@@ -7,7 +7,7 @@ const isolationHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@esp32-sim/sim-core", "@esp32-sim/runtime-micropython"],
+  transpilePackages: ["@esp32-sim/sim-core", "@esp32-sim/runtime-micropython", "@esp32-sim/runtime-arduino"],
   async headers() {
     return [
       { source: "/sim", headers: isolationHeaders },

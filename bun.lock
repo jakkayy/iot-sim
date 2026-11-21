@@ -14,6 +14,7 @@
       "name": "@esp32-sim/web",
       "version": "0.0.0",
       "dependencies": {
+        "@esp32-sim/runtime-arduino": "workspace:*",
         "@esp32-sim/runtime-micropython": "workspace:*",
         "@esp32-sim/sim-core": "workspace:*",
         "next": "^15.1.0",
@@ -24,6 +25,17 @@
         "@types/node": "^22.0.0",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
+        "typescript": "^5.6.0",
+      },
+    },
+    "packages/runtime-arduino": {
+      "name": "@esp32-sim/runtime-arduino",
+      "version": "0.0.0",
+      "dependencies": {
+        "@esp32-sim/sim-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
         "typescript": "^5.6.0",
       },
     },
@@ -46,6 +58,8 @@
   },
   "packages": {
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
+
+    "@esp32-sim/runtime-arduino": ["@esp32-sim/runtime-arduino@workspace:packages/runtime-arduino"],
 
     "@esp32-sim/runtime-micropython": ["@esp32-sim/runtime-micropython@workspace:packages/runtime-micropython"],
 
