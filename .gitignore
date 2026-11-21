@@ -6,5 +6,5 @@ dist
 .env*
 *.tsbuildinfo
 next-env.d.ts
-public/micropython/
-public/arduino/
+apps/web/public/micropython/
+apps/web/public/arduino/
