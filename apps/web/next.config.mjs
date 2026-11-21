@@ -7,6 +7,7 @@ const isolationHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ["@esp32-sim/sim-core"],
   async headers() {
     return [
       { source: "/sim", headers: isolationHeaders },
