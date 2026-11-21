@@ -24,11 +24,26 @@ export default function SimPage() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const run = () => {
+  const [log, setLog] = useState<string[]>([]);
+
+  const run = (lang: "js" | "py") => {
     const buffer = createPinBuffer();
     pinsRef.current = new PinState(buffer);
-    const worker = new Worker(new URL("./blink.worker.ts", import.meta.url));
-    worker.postMessage({ buffer });
+    setLog([]);
+    const worker =
+      lang === "py"
+        ? new Worker(new URL("./micropython.worker.ts", import.meta.url))
+        : new Worker(new URL("./blink.worker.ts", import.meta.url));
+    worker.onmessage = (e: MessageEvent<{ type: string; line?: string; message?: string }>) => {
+      const text = e.data.line ?? e.data.message ?? "";
+      setLog((l) => [...l, `[${e.data.type}] ${text}`]);
+    };
+    const abs = (p: string) => new URL(p, location.href).href;
+    worker.postMessage({
+      buffer,
+      wasmUrl: abs("/micropython/micropython.wasm"),
+      loaderUrl: abs("/micropython/micropython.mjs"),
+    });
     workerRef.current = worker;
     setRunning(true);
   };
@@ -50,8 +65,10 @@ export default function SimPage() {
         data-testid="led"
         style={{ width: 32, height: 32, borderRadius: 16, background: "#444", margin: "12px 0" }}
       />
-      <button onClick={run} disabled={running || !isolated}>Run</button>{" "}
+      <button onClick={() => run("js")} disabled={running || !isolated}>Run JS</button>{" "}
+      <button onClick={() => run("py")} disabled={running || !isolated}>Run MicroPython</button>{" "}
       <button onClick={stop} disabled={!running}>Stop</button>
+      <pre data-testid="log">{log.join("\n")}</pre>
     </main>
   );
 }

@@ -14,6 +14,7 @@
       "name": "@esp32-sim/web",
       "version": "0.0.0",
       "dependencies": {
+        "@esp32-sim/runtime-micropython": "workspace:*",
         "@esp32-sim/sim-core": "workspace:*",
         "next": "^15.1.0",
         "react": "^19.0.0",
@@ -24,6 +25,14 @@
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         "typescript": "^5.6.0",
+      },
+    },
+    "packages/runtime-micropython": {
+      "name": "@esp32-sim/runtime-micropython",
+      "version": "0.0.0",
+      "dependencies": {
+        "@esp32-sim/sim-core": "workspace:*",
+        "@micropython/micropython-webassembly-pyscript": "1.29.0-6",
       },
     },
     "packages/sim-core": {
@@ -37,6 +46,8 @@
   },
   "packages": {
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
+
+    "@esp32-sim/runtime-micropython": ["@esp32-sim/runtime-micropython@workspace:packages/runtime-micropython"],
 
     "@esp32-sim/sim-core": ["@esp32-sim/sim-core@workspace:packages/sim-core"],
 
@@ -95,6 +106,8 @@
     "@img/sharp-win32-ia32": ["@img/sharp-win32-ia32@0.35.5", "", { "os": "win32", "cpu": "ia32" }, "sha512-5Zm82LoBc43nhwNybZlG7Y1KO//Zhsn306fQl29ZOuStHLGTo3BWL83q3cznX0poxSAMuYL1On/BHBxkBeKr6A=="],
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.5", "", { "os": "win32", "cpu": "x64" }, "sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg=="],
+
+    "@micropython/micropython-webassembly-pyscript": ["@micropython/micropython-webassembly-pyscript@1.29.0-6", "", {}, "sha512-kLwGPJFsLY/2aUPmzZxpvauFSmKc0SlJWVvvEttULR0poVQ6W9HV//1fUJyxrGWAxCVDw9aYqJ0LAog0ZLjYVA=="],
 
     "@next/env": ["@next/env@15.5.29", "", {}, "sha512-9SrTiTsgORa+KfhlXXAGC1eSs847E+d2MQTPUX+n7R5XA8g/B6ZitfL6GoYHNMLwG3Hzs1wjDH0/ME5WrGMqBQ=="],
 

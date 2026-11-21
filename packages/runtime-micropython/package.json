@@ -1,0 +1,12 @@
+{
+  "name": "@esp32-sim/runtime-micropython",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@esp32-sim/sim-core": "workspace:*",
+    "@micropython/micropython-webassembly-pyscript": "1.29.0-6"
+  }
+}

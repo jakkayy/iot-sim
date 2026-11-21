@@ -5,13 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "predev": "node scripts/copy-wasm.mjs",
+    "prebuild": "node scripts/copy-wasm.mjs"
   },
   "dependencies": {
     "@esp32-sim/sim-core": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "@esp32-sim/runtime-micropython": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
