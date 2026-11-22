@@ -61,8 +61,8 @@ export interface Evaluation {
   levels: Map<string, Level>;
   /** GPIO number -> level seen by that pin. */
   gpioInput: Map<number, Level>;
-  /** 0 or 1 per LED component. */
-  leds: Map<string, Level>;
+  /** LED brightness 0..1 per LED component (PWM duty when driven by PWM). */
+  leds: Map<string, number>;
   /** Wire colouring: nets touching a supply high / low rail, otherwise signal. */
   netKind: Map<string, NetKind>;
   warnings: CircuitWarning[];
@@ -156,6 +156,9 @@ export class Circuit {
       strongHigh: boolean;
       strongLow: boolean;
       pullup: boolean;
+      pulldown: boolean;
+      /** Duty (0..1) of a PWM output driving this net high. */
+      duty?: number;
       gpios: Array<{ gpio: number; endpoint: Endpoint; mode: number }>;
       volts5: boolean;
       hasSupplyHigh: boolean;
@@ -170,6 +173,7 @@ export class Circuit {
           strongHigh: false,
           strongLow: false,
           pullup: false,
+          pulldown: false,
           gpios: [],
           volts5: false,
           hasSupplyHigh: false,
@@ -204,7 +208,13 @@ export class Circuit {
         if (def.gpio === undefined) continue;
         const mode = pins ? pins.get(def.gpio, PinField.Mode) : PinMode.Unset;
         n.gpios.push({ gpio: def.gpio, endpoint, mode });
-        const latch = pins ? pins.get(def.gpio, PinField.Level) : 0;
+        let latch = pins ? pins.get(def.gpio, PinField.Level) : 0;
+        const pwmFreq = pins ? pins.get(def.gpio, PinField.PwmFreq) : 0;
+        if (mode === PinMode.Output && pwmFreq > 0) {
+          const duty = Math.min(1, Math.max(0, pins!.get(def.gpio, PinField.Pwm) / 65535));
+          latch = duty > 0 ? 1 : 0;
+          if (duty > 0 && duty < 1) n.duty = duty;
+        }
         if (mode === PinMode.Output) {
           if (latch) n.strongHigh = true;
           else n.strongLow = true;
@@ -212,6 +222,8 @@ export class Circuit {
           if (!latch) n.strongLow = true;
         } else if (mode === PinMode.InputPullup) {
           n.pullup = true;
+        } else if (mode === PinMode.InputPulldown) {
+          n.pulldown = true;
         }
         if (
           INPUT_ONLY_GPIOS.has(def.gpio) &&
@@ -228,7 +240,7 @@ export class Circuit {
     }
 
     // Resolve levels. Strength 3 = strong driver, 2 = through a resistor, 1 = internal pull-up.
-    const resolved = new Map<string, { level: Level; strength: 1 | 2 | 3 }>();
+    const resolved = new Map<string, { level: Level; strength: 1 | 2 | 3; duty?: number }>();
     for (const [id, n] of nets) {
       if (n.strongHigh && n.strongLow) {
         warn({
@@ -238,9 +250,10 @@ export class Circuit {
           endpoints: n.endpoints,
         });
         resolved.set(id, { level: 0, strength: 3 });
-      } else if (n.strongHigh) resolved.set(id, { level: 1, strength: 3 });
+      } else if (n.strongHigh) resolved.set(id, { level: 1, strength: 3, duty: n.duty });
       else if (n.strongLow) resolved.set(id, { level: 0, strength: 3 });
-      else if (n.pullup) resolved.set(id, { level: 1, strength: 1 });
+      else if (n.pullup && !n.pulldown) resolved.set(id, { level: 1, strength: 1 });
+      else if (n.pulldown && !n.pullup) resolved.set(id, { level: 0, strength: 1 });
     }
 
     // Propagate through resistors until stable. A level only moves to nets with weaker strength.
@@ -261,7 +274,7 @@ export class Circuit {
           if (!src || src.strength < 2) continue;
           const dst = resolved.get(to);
           if (!dst || dst.strength < 2) {
-            resolved.set(to, { level: src.level, strength: 2 });
+            resolved.set(to, { level: src.level, strength: 2, duty: src.duty });
             changed = true;
           }
         }
@@ -278,13 +291,16 @@ export class Circuit {
     }
 
     // Components that read nets.
-    const leds = new Map<string, Level>();
+    const leds = new Map<string, number>();
     for (const c of this.data.components) {
       const spec = this.spec(c);
       if (spec.kind !== "led") continue;
       const an = netOf.get(`${c.id}:${spec.anode}`)!;
       const ca = netOf.get(`${c.id}:${spec.cathode}`)!;
-      leds.set(c.id, levels.get(an) === 1 && levels.get(ca) === 0 ? 1 : 0);
+      leds.set(
+        c.id,
+        resolved.get(an)?.level === 1 && resolved.get(ca)?.level === 0 ? (resolved.get(an)?.duty ?? 1) : 0,
+      );
 
       const direct = (net: NetInfo | undefined, high: boolean) =>
         !!net && (net.gpios.length > 0 || (high ? net.hasSupplyHigh : net.hasSupplyLow));
@@ -319,6 +335,10 @@ export class Circuit {
 
   /** Write the circuit-side level of every GPIO into the shared pin buffer. */
   applyInputs(pins: PinState, evaluation: Evaluation): void {
-    for (const [gpio, level] of evaluation.gpioInput) pins.set(gpio, PinField.Input, level);
+    for (const [gpio, level] of evaluation.gpioInput) {
+      pins.set(gpio, PinField.Input, level);
+      // Logic-level ADC: rails only. Analog sources (potentiometer, sensors) override this later.
+      pins.set(gpio, PinField.Analog, level ? 4095 : 0);
+    }
   }
 }

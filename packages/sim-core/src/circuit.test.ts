@@ -176,3 +176,40 @@ describe("net kinds (wire colouring)", () => {
     expect(ev.netKind.get(ev.netOf.get("esp:GPIO4")!)).toBe("signal");
   });
 });
+
+describe("pull-down and PWM", () => {
+  test("input with pull-down reads 0 and a pressed button to 3V3 reads 1", () => {
+    const c = build(
+      [board, { id: "b", type: "btn" }],
+      [w("esp:GPIO4", "b:1"), w("b:2", "esp:3V3")],
+    );
+    const pins = newPins();
+    pins.setMode(4, PinMode.InputPulldown);
+    expect(c.evaluate(pins, { b: false }).gpioInput.get(4)).toBe(0);
+    expect(c.evaluate(pins, { b: true }).gpioInput.get(4)).toBe(1);
+  });
+
+  test("PWM duty becomes LED brightness through a resistor", () => {
+    const c = build(
+      [board, { id: "r", type: "res" }, { id: "led", type: "led" }],
+      [w("esp:GPIO2", "r:1"), w("r:2", "led:A"), w("led:K", "esp:GND")],
+    );
+    const pins = newPins();
+    pins.setMode(2, PinMode.Output);
+    pins.set(2, 5, 1000); // PwmFreq
+    pins.set(2, 3, 16384); // Pwm duty ~25%
+    expect(c.evaluate(pins).leds.get("led")).toBeCloseTo(0.25, 2);
+    pins.set(2, 3, 65535);
+    expect(c.evaluate(pins).leds.get("led")).toBe(1);
+    pins.set(2, 3, 0);
+    expect(c.evaluate(pins).leds.get("led")).toBe(0);
+  });
+
+  test("applyInputs also fills the logic-level ADC value", () => {
+    const c = build([board], [w("esp:GPIO4", "esp:3V3")]);
+    const pins = newPins();
+    pins.setMode(4, PinMode.Input);
+    c.applyInputs(pins, c.evaluate(pins));
+    expect(pins.get(4, 2)).toBe(4095);
+  });
+});

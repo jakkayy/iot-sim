@@ -14,8 +14,13 @@ export const PinField = {
   Pwm: 3,
   /** Level the pin reads from the circuit (written by the UI thread after evaluating nets). */
   Input: 4,
+  /** PWM frequency in Hz; 0 means PWM is off. Duty lives in `Pwm` (0..65535). */
+  PwmFreq: 5,
 } as const;
-export const FIELDS_PER_PIN = 5;
+export const FIELDS_PER_PIN = 6;
+
+/** Extra Int32 after the pin slots: bumped by the UI thread to wake a sleeping Worker. */
+const WAKE_INDEX = PIN_COUNT * FIELDS_PER_PIN;
 
 export const PinMode = {
   Unset: 0,
@@ -24,10 +29,11 @@ export const PinMode = {
   InputPullup: 3,
   /** Drives low or releases the line; used for I2C / 1-Wire. */
   OpenDrain: 4,
+  InputPulldown: 5,
 } as const;
 
 export function createPinBuffer(): SharedArrayBuffer {
-  return new SharedArrayBuffer(PIN_COUNT * FIELDS_PER_PIN * Int32Array.BYTES_PER_ELEMENT);
+  return new SharedArrayBuffer((PIN_COUNT * FIELDS_PER_PIN + 1) * Int32Array.BYTES_PER_ELEMENT);
 }
 
 export class PinState {
@@ -69,5 +75,17 @@ export class PinState {
   readPin(pin: number): number {
     const mode = this.get(pin, PinField.Mode);
     return mode === PinMode.Output ? this.get(pin, PinField.Level) : this.get(pin, PinField.Input);
+  }
+
+  /** UI thread: signal that inputs changed so a sleeping Worker can poll sooner. */
+  notifyWake(): void {
+    Atomics.add(this.view, WAKE_INDEX, 1);
+    Atomics.notify(this.view, WAKE_INDEX);
+  }
+
+  /** Worker: block up to `ms` real milliseconds, returning early if notifyWake() is called. */
+  waitWake(ms: number): void {
+    if (ms <= 0) return;
+    Atomics.wait(this.view, WAKE_INDEX, Atomics.load(this.view, WAKE_INDEX), ms);
   }
 }

@@ -67,7 +67,7 @@ export function Canvas({
       if (running) circuit.applyInputs(running, ev);
       for (const c of store.getState().components) {
         const g = groupRefs.current[c.id];
-        if (g) applyVisual(c.type, g, { lit: ev.leds.get(c.id) === 1, pressed: !!pressedRef.current[c.id] });
+        if (g) applyVisual(c.type, g, { brightness: ev.leds.get(c.id) ?? 0, pressed: !!pressedRef.current[c.id] });
       }
       const key = ev.warnings.map((w) => `${w.code}|${w.endpoints.join(",")}`).join(";");
       if (key !== lastKey) {

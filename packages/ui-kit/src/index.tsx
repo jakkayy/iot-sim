@@ -3,9 +3,16 @@ import type { ReactElement } from "react";
 
 /** Live state pushed into a device's SVG once per animation frame. */
 export interface VisualState {
-  lit?: boolean;
+  /** LED brightness 0..1 (PWM duty when driven by PWM). */
+  brightness?: number;
   pressed?: boolean;
 }
+
+const OFF = [0x7f, 0x1d, 0x1d];
+const ON = [0xff, 0x3b, 0x30];
+const mix = (t: number) =>
+  "#" +
+  OFF.map((o, i) => Math.round(o + (ON[i] - o) * t).toString(16).padStart(2, "0")).join("");
 
 const GLOW = "#ff3b30";
 
@@ -94,8 +101,9 @@ export function DeviceBody({ def }: { def: DeviceDef }): ReactElement | null {
  */
 export function applyVisual(type: string, g: SVGGElement, state: VisualState): void {
   if (type === "led") {
-    g.querySelector("[data-glow]")?.setAttribute("opacity", state.lit ? "0.85" : "0");
-    g.querySelector("[data-body]")?.setAttribute("fill", state.lit ? "#ff3b30" : "#7f1d1d");
+    const b = Math.min(1, Math.max(0, state.brightness ?? 0));
+    g.querySelector("[data-glow]")?.setAttribute("opacity", String(+(b * 0.85).toFixed(3)));
+    g.querySelector("[data-body]")?.setAttribute("fill", mix(b));
   } else if (type === "button") {
     g.querySelector("[data-cap]")?.setAttribute("r", state.pressed ? "9" : "11");
   }
