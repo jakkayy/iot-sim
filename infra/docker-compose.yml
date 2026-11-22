@@ -1,0 +1,90 @@
+# Home server stack. See infra/README.md for setup and docs/security.md for the threat model.
+name: esp32-sim
+
+x-hardened: &hardened
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  # Narrow view of the Docker API for the compiler. Endpoint-level filtering only: it cannot
+  # inspect request bodies, so the compiler's own hard-coded flags and a rootless daemon /
+  # gVisor are what really bound the damage of a compromise (see docs/security.md).
+  socket-proxy:
+    <<: *hardened
+    image: tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      IMAGES: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 0
+      EXEC: 0
+      VOLUMES: 0
+      NETWORKS: 0
+      SERVICES: 0
+      SWARM: 0
+      SECRETS: 0
+      BUILD: 0
+      COMMIT: 0
+      PLUGINS: 0
+      SYSTEM: 0
+      AUTH: 0
+      INFO: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [dockerapi]
+    # Not read_only: the entrypoint renders haproxy.cfg at startup.
+
+  compiler:
+    <<: *hardened
+    image: ${REGISTRY:-ghcr.io/OWNER}/esp32-sim-compiler:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: services/compiler/Dockerfile
+    environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
+      SANDBOX_IMAGE: ${REGISTRY:-ghcr.io/OWNER}/esp32-sim-sandbox:${TAG:-latest}
+      # "runsc" (gVisor) adds a user-space kernel between compiled code and the host.
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-}
+      ALLOWED_ORIGINS: ${WEB_ORIGIN:?set WEB_ORIGIN to the simulator origin, e.g. https://sim.example.com}
+      TRUST_CF_HEADER: "1"   # only safe because the compiler is reachable solely through cloudflared
+      RATE_PER_MINUTE: ${RATE_PER_MINUTE:-10}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+    volumes:
+      - compiler-cache:/cache
+    networks: [edge, dockerapi]
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 256m
+    depends_on: [socket-proxy]
+
+  # Pulled ahead of time so compiles never wait on a registry: `docker compose --profile images pull`
+  sandbox-image:
+    image: ${REGISTRY:-ghcr.io/OWNER}/esp32-sim-sandbox:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: services/compiler/sandbox/Dockerfile
+    profiles: ["images"]
+    command: ["true"]
+
+  # Outbound-only tunnel: no router port is opened and the home IP is never published.
+  cloudflared:
+    <<: *hardened
+    image: cloudflare/cloudflared:2025.2.0
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?create a tunnel in Cloudflare Zero Trust and set its token}
+    networks: [edge]
+    depends_on: [compiler]
+
+networks:
+  # compiler <-> cloudflared. Public hostnames in the tunnel point at http://compiler:8787.
+  edge: {}
+  # compiler <-> socket-proxy only; no route to the internet.
+  dockerapi:
+    internal: true
+
+volumes:
+  compiler-cache: {}
