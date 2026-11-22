@@ -69,6 +69,21 @@
         "typescript": "^5.6.0",
       },
     },
+    "packages/ui-kit": {
+      "name": "@esp32-sim/ui-kit",
+      "version": "0.0.0",
+      "dependencies": {
+        "@esp32-sim/devices": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/react": "^19.0.0",
+        "react": "^19.0.0",
+        "typescript": "^5.6.0",
+      },
+      "peerDependencies": {
+        "react": "^19.0.0",
+      },
+    },
   },
   "packages": {
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
@@ -80,6 +95,8 @@
     "@esp32-sim/runtime-micropython": ["@esp32-sim/runtime-micropython@workspace:packages/runtime-micropython"],
 
     "@esp32-sim/sim-core": ["@esp32-sim/sim-core@workspace:packages/sim-core"],
+
+    "@esp32-sim/ui-kit": ["@esp32-sim/ui-kit@workspace:packages/ui-kit"],
 
     "@esp32-sim/web": ["@esp32-sim/web@workspace:apps/web"],
 
