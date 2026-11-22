@@ -22,7 +22,10 @@ SIM_IMPORT(pinMode) void pinMode(uint8_t pin, uint8_t mode);
 SIM_IMPORT(digitalWrite) void digitalWrite(uint8_t pin, uint8_t val);
 SIM_IMPORT(digitalRead) int digitalRead(uint8_t pin);
 SIM_IMPORT(delay) void delay(uint32_t ms);
+SIM_IMPORT(analogRead) int analogRead(uint8_t pin);
+SIM_IMPORT(delayMicroseconds) void delayMicroseconds(uint32_t us);
 SIM_IMPORT(millis) uint32_t millis(void);
+SIM_IMPORT(micros) uint32_t micros(void);
 
 #ifdef __cplusplus
 }

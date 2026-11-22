@@ -1,11 +1,4 @@
-import { PinMode, PinState, sleepMs } from "@esp32-sim/sim-core";
-
-export interface ArduinoHost {
-  pins: PinState;
-  /** Defaults to a blocking sleep; only valid inside a Worker. */
-  delay?: (ms: number) => void;
-  millis?: () => number;
-}
+import { PinMode, type SimHal } from "@esp32-sim/sim-core";
 
 export interface Sketch {
   setup(): void;
@@ -21,24 +14,28 @@ function toSimMode(arduinoMode: number): number {
       return PinMode.Output;
     case 0x05:
       return PinMode.InputPullup;
+    case 0x09:
+      return PinMode.InputPulldown;
+    case 0x12:
+      return PinMode.OpenDrain;
     default:
       throw new RangeError(`unsupported pinMode ${arduinoMode}`);
   }
 }
 
-/** Instantiate a sketch compiled against arduino-shim; imports are the HAL. */
-export async function loadSketch(wasm: BufferSource, host: ArduinoHost): Promise<Sketch> {
-  const start = performance.now();
-  const delay = host.delay ?? sleepMs;
-  const millis = host.millis ?? (() => Math.floor(performance.now() - start));
+/** Instantiate a sketch compiled against arduino-shim; every import is a HAL call. */
+export async function loadSketch(wasm: BufferSource, hal: SimHal): Promise<Sketch> {
   const module = await WebAssembly.compile(wasm);
   const instance = await WebAssembly.instantiate(module, {
     env: {
-      pinMode: (pin: number, mode: number) => host.pins.setMode(pin, toSimMode(mode)),
-      digitalWrite: (pin: number, val: number) => host.pins.writeDigital(pin, val ? 1 : 0),
-      digitalRead: (pin: number) => host.pins.readDigital(pin),
-      delay: (ms: number) => delay(ms),
-      millis: () => millis(),
+      pinMode: (pin: number, mode: number) => hal.pinMode(pin, toSimMode(mode)),
+      digitalWrite: (pin: number, val: number) => hal.digitalWrite(pin, val),
+      digitalRead: (pin: number) => hal.digitalRead(pin),
+      analogRead: (pin: number) => hal.analogRead(pin),
+      delay: (ms: number) => hal.delay(ms >>> 0),
+      delayMicroseconds: (us: number) => hal.delayUs(us >>> 0),
+      millis: () => hal.millis() >>> 0,
+      micros: () => hal.micros() >>> 0,
     },
   });
   const { sim_setup, sim_loop } = instance.exports as {

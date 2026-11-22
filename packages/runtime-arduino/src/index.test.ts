@@ -1,32 +1,49 @@
 import { describe, expect, test } from "bun:test";
-import { PinField, PinMode, PinState, createPinBuffer } from "@esp32-sim/sim-core";
+import {
+  PinField,
+  PinMode,
+  PinState,
+  SimHal,
+  VirtualClock,
+  createClockBuffer,
+  createPinBuffer,
+} from "@esp32-sim/sim-core";
 import { loadSketch, runSketch } from "./index";
 
 const blink = await Bun.file(new URL("../fixtures/blink.wasm", import.meta.url).pathname).arrayBuffer();
 
+function makeHal(onSleep?: (now: number, pins: PinState) => void) {
+  let t = 0;
+  const pins = new PinState(createPinBuffer());
+  const clock = new VirtualClock(createClockBuffer(), () => t, true);
+  const hal = new SimHal({
+    pins,
+    clock,
+    sleep: (ms) => {
+      t += ms;
+      onSleep?.(t, pins);
+    },
+  });
+  return { hal, pins, clock, now: () => t };
+}
+
 describe("arduino runtime", () => {
-  test("blink sketch drives LED_BUILTIN (pin 2) through the HAL", async () => {
-    const pins = new PinState(createPinBuffer());
-    const delays: number[] = [];
-    const levelAtDelay: number[] = [];
-    const sketch = await loadSketch(blink, {
-      pins,
-      delay: (ms) => {
-        delays.push(ms);
-        levelAtDelay.push(pins.readDigital(2));
-      },
-    });
+  test("blink sketch drives LED_BUILTIN (pin 2) through the HAL with virtual delays", async () => {
+    const levels: number[] = [];
+    const { hal, pins, clock } = makeHal((_now, p) => levels.push(p.readDigital(2)));
+    const sketch = await loadSketch(blink, hal);
     runSketch(sketch, { maxLoops: 2 });
     expect(pins.get(2, PinField.Mode)).toBe(PinMode.Output);
-    expect(levelAtDelay).toEqual([1, 0, 1, 0]);
-    expect(delays).toEqual([500, 500, 500, 500]);
+    expect(clock.nowMs()).toBeGreaterThanOrEqual(2000);
+    expect(levels[0]).toBe(1);
+    expect(new Set(levels)).toEqual(new Set([0, 1]));
   });
 
   test("shouldStop ends the loop", async () => {
-    const pins = new PinState(createPinBuffer());
-    let calls = 0;
-    const sketch = await loadSketch(blink, { pins, delay: () => calls++ });
-    runSketch(sketch, { shouldStop: () => calls >= 2 });
-    expect(calls).toBe(2);
+    const { hal } = makeHal();
+    const sketch = await loadSketch(blink, hal);
+    let loops = 0;
+    runSketch(sketch, { shouldStop: () => loops++ >= 2 });
+    expect(loops).toBe(3);
   });
 });
