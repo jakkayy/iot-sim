@@ -12,14 +12,18 @@ export const PinField = {
   Level: 1,
   Analog: 2,
   Pwm: 3,
+  /** Level the pin reads from the circuit (written by the UI thread after evaluating nets). */
+  Input: 4,
 } as const;
-export const FIELDS_PER_PIN = 4;
+export const FIELDS_PER_PIN = 5;
 
 export const PinMode = {
   Unset: 0,
   Input: 1,
   Output: 2,
   InputPullup: 3,
+  /** Drives low or releases the line; used for I2C / 1-Wire. */
+  OpenDrain: 4,
 } as const;
 
 export function createPinBuffer(): SharedArrayBuffer {
@@ -56,7 +60,14 @@ export class PinState {
     this.set(pin, PinField.Level, level);
   }
 
+  /** Level the code last wrote to the pin (its output latch). */
   readDigital(pin: number): number {
     return this.get(pin, PinField.Level);
+  }
+
+  /** What digitalRead() returns: the latch for outputs, the circuit level otherwise. */
+  readPin(pin: number): number {
+    const mode = this.get(pin, PinField.Mode);
+    return mode === PinMode.Output ? this.get(pin, PinField.Level) : this.get(pin, PinField.Input);
   }
 }

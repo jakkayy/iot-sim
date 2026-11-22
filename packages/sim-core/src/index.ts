@@ -1,2 +1,3 @@
 export * from "./pins";
 export * from "./delay";
+export * from "./clock";
