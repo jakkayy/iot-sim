@@ -6,6 +6,7 @@
  */
 import { PinField, PinMode, PinState } from "./pins";
 import { VirtualClock } from "./clock";
+import type { I2CSlave, SensorModel } from "./i2c";
 
 export type Edge = "rising" | "falling" | "change";
 
@@ -38,6 +39,8 @@ export class SimHal {
   private readonly irqs = new Map<number, Irq>();
   private readonly timers = new Map<number, TimerEntry>();
   private polling = false;
+  private readonly i2cBuses = new Map<string, I2CSlave[]>();
+  private readonly sensors = new Map<string, SensorModel>();
 
   constructor(opts: HalOptions) {
     this.pins = opts.pins;
@@ -153,5 +156,61 @@ export class SimHal {
     } finally {
       this.polling = false;
     }
+  }
+
+  // --- I2C ----------------------------------------------------------------
+  /** A bus is identified by its GPIO pair, so firmware that picks SDA/SCL finds the wired slaves. */
+  private static busKey(sda: number, scl: number): string {
+    return `${sda}:${scl}`;
+  }
+
+  attachI2cSlave(sda: number, scl: number, slave: I2CSlave): void {
+    const key = SimHal.busKey(sda, scl);
+    const list = this.i2cBuses.get(key) ?? [];
+    list.push(slave);
+    this.i2cBuses.set(key, list);
+  }
+
+  /** Returns false (NACK) when nothing answers at `addr`. */
+  i2cWrite(sda: number, scl: number, addr: number, data: Uint8Array): boolean {
+    this.poll();
+    const slave = this.i2cBuses.get(SimHal.busKey(sda, scl))?.find((s) => s.addr === addr);
+    return slave ? slave.write(data) : false;
+  }
+
+  /** Returns null when nothing answers at `addr`. */
+  i2cRead(sda: number, scl: number, addr: number, count: number): Uint8Array | null {
+    this.poll();
+    const slave = this.i2cBuses.get(SimHal.busKey(sda, scl))?.find((s) => s.addr === addr);
+    return slave ? slave.read(count) : null;
+  }
+
+  i2cScan(sda: number, scl: number): number[] {
+    return (this.i2cBuses.get(SimHal.busKey(sda, scl)) ?? []).map((s) => s.addr).sort((a, b) => a - b);
+  }
+
+  // --- Sensors ------------------------------------------------------------
+  attachSensor(kind: string, gpio: number, model: SensorModel): void {
+    this.sensors.set(`${kind}:${gpio}`, model);
+  }
+
+  sensorRead(kind: string, gpio: number): Record<string, number> | null {
+    this.poll();
+    return this.sensors.get(`${kind}:${gpio}`)?.read() ?? null;
+  }
+
+  /**
+   * Measure a pulse like MicroPython time_pulse_us / Arduino pulseIn. Only an
+   * HC-SR04 echo is simulated: the pulse lasts distance_cm * 58 microseconds.
+   * Returns microseconds, or -2 after `timeoutUs` if no pulse arrives.
+   */
+  pulseIn(pin: number, level: number, timeoutUs: number): number {
+    const echo = level ? this.sensorRead("hcsr04-echo", pin) : null;
+    if (!echo || !echo.echoUs || echo.echoUs > timeoutUs) {
+      this.delayUs(timeoutUs);
+      return -2;
+    }
+    this.delayUs(echo.echoUs);
+    return Math.round(echo.echoUs);
   }
 }

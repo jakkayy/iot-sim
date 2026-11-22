@@ -174,3 +174,53 @@ describe("PinState wake cell", () => {
     expect(elapsed).toBeLessThan(1500);
   });
 });
+
+describe("SimHal I2C and sensors", () => {
+  const slave = (addr: number, log: number[][] = []) => ({
+    addr,
+    write: (b: Uint8Array) => (log.push([...b]), true),
+    read: (n: number) => new Uint8Array(n).fill(7),
+  });
+
+  test("writes reach the slave on the matching SDA/SCL pair; others NACK", () => {
+    const { hal } = setup();
+    const log: number[][] = [];
+    hal.attachI2cSlave(21, 22, slave(0x3c, log));
+    expect(hal.i2cWrite(21, 22, 0x3c, new Uint8Array([1, 2]))).toBe(true);
+    expect(log).toEqual([[1, 2]]);
+    expect(hal.i2cWrite(21, 22, 0x27, new Uint8Array([1]))).toBe(false); // wrong address
+    expect(hal.i2cWrite(4, 5, 0x3c, new Uint8Array([1]))).toBe(false); // wrong bus
+  });
+
+  test("read and scan", () => {
+    const { hal } = setup();
+    hal.attachI2cSlave(21, 22, slave(0x3c));
+    hal.attachI2cSlave(21, 22, slave(0x27));
+    expect([...hal.i2cRead(21, 22, 0x27, 3)!]).toEqual([7, 7, 7]);
+    expect(hal.i2cRead(21, 22, 0x50, 1)).toBeNull();
+    expect(hal.i2cScan(21, 22)).toEqual([0x27, 0x3c]);
+    expect(hal.i2cScan(1, 2)).toEqual([]);
+  });
+
+  test("sensorRead returns the model reading or null", () => {
+    const { hal } = setup();
+    hal.attachSensor("dht22", 4, { read: () => ({ temperature: 21.5, humidity: 40 }) });
+    expect(hal.sensorRead("dht22", 4)).toEqual({ temperature: 21.5, humidity: 40 });
+    expect(hal.sensorRead("dht22", 5)).toBeNull();
+  });
+
+  test("pulseIn returns the echo time and advances the virtual clock; no sensor times out", () => {
+    const { hal, clock } = setup();
+    hal.attachSensor("hcsr04-echo", 18, { read: () => ({ echoUs: 5800 }) });
+    const t0 = clock.nowMs();
+    expect(hal.pulseIn(18, 1, 30000)).toBe(5800);
+    expect(clock.nowMs() - t0).toBeGreaterThan(5.79);
+    expect(clock.nowMs() - t0).toBeLessThan(9);
+    const t1 = clock.nowMs();
+    expect(hal.pulseIn(19, 1, 30000)).toBe(-2);
+    expect(clock.nowMs() - t1).toBeGreaterThan(29.9);
+    // an echo longer than the timeout also times out
+    hal.attachSensor("hcsr04-echo", 20, { read: () => ({ echoUs: 40000 }) });
+    expect(hal.pulseIn(20, 1, 30000)).toBe(-2);
+  });
+});
