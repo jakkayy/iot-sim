@@ -31,6 +31,9 @@ type LoadMicroPython = (options: {
   stderr?: (line: string) => void;
 }) => Promise<MicroPython>;
 
+const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (x) => parseInt(x, 16));
+
 /** The JS side of `_hal`: the only host functions Python can call. */
 function makeHalModule(hal: SimHal) {
   const pending: string[] = [];
@@ -58,6 +61,18 @@ function makeHalModule(hal: SimHal) {
     },
     millis: () => hal.millis(),
     micros: () => hal.micros(),
+    i2c_write: (sda: number, scl: number, addr: number, hex: string) =>
+      hal.i2cWrite(sda, scl, addr, fromHex(hex)),
+    i2c_read: (sda: number, scl: number, addr: number, n: number) => {
+      const data = hal.i2cRead(sda, scl, addr, n);
+      return data ? toHex(data) : "";
+    },
+    i2c_scan: (sda: number, scl: number) => hal.i2cScan(sda, scl).join(","),
+    sensor_read: (kind: string, gpio: number) => {
+      const r = hal.sensorRead(kind, gpio);
+      return r ? `${r.temperature},${r.humidity}` : "";
+    },
+    pulse_in: (pin: number, level: number, timeoutUs: number) => hal.pulseIn(pin, level, timeoutUs),
     /** Sleep, returning early when an interrupt/timer is pending so Python can run its handler. */
     delay_ms: (ms: number) => hal.delay(ms, () => pending.length > 0),
   };

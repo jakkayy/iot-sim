@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@esp32-sim/devices": "workspace:*"
   }
 }
