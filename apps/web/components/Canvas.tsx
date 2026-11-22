@@ -60,11 +60,19 @@ export function Canvas({
   useEffect(() => {
     let raf = 0;
     let lastKey = "";
+    let lastInputs = "";
     const frame = () => {
       const running = pinsRef.current;
       const pins = running ?? idlePins.current;
       const ev = circuit.evaluate(pins, pressedRef.current);
-      if (running) circuit.applyInputs(running, ev);
+      if (running) {
+        circuit.applyInputs(running, ev);
+        const sig = [...ev.gpioInput].map(([g, l]) => `${g}:${l}`).join(",");
+        if (sig !== lastInputs) {
+          lastInputs = sig;
+          running.notifyWake(); // let a sleeping program poll interrupts right away
+        }
+      }
       for (const c of store.getState().components) {
         const g = groupRefs.current[c.id];
         if (g) applyVisual(c.type, g, { brightness: ev.leds.get(c.id) ?? 0, pressed: !!pressedRef.current[c.id] });
@@ -215,28 +223,6 @@ export function Canvas({
                   />
                 )}
                 <DeviceBody def={def} />
-                {def.controls?.some((x) => x.kind === "momentary") && (
-                  <rect
-                    data-testid={`press-${c.id}`}
-                    x={def.width / 2 - 12}
-                    y={def.height / 2 - 12}
-                    width={24}
-                    height={24}
-                    fill="transparent"
-                    cursor="pointer"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      pressedRef.current[c.id] = true;
-                      window.addEventListener(
-                        "pointerup",
-                        () => {
-                          pressedRef.current[c.id] = false;
-                        },
-                        { once: true },
-                      );
-                    }}
-                  />
-                )}
               </g>
             );
           })}
@@ -278,6 +264,28 @@ export function Canvas({
             if (!def) return null;
             return (
               <g key={c.id} transform={`translate(${c.x} ${c.y})`}>
+                {def.controls?.some((x) => x.kind === "momentary") && (
+                  <rect
+                    data-testid={`press-${c.id}`}
+                    x={def.width / 2 - 12}
+                    y={def.height / 2 - 12}
+                    width={24}
+                    height={24}
+                    fill="transparent"
+                    cursor="pointer"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      pressedRef.current[c.id] = true;
+                      window.addEventListener(
+                        "pointerup",
+                        () => {
+                          pressedRef.current[c.id] = false;
+                        },
+                        { once: true },
+                      );
+                    }}
+                  />
+                )}
                 {def.pins.map((p) => {
                   const endpoint = `${c.id}:${p.name}`;
                   const bad = badEndpoints.has(endpoint);

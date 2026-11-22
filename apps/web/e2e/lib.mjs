@@ -30,7 +30,7 @@ export async function openPage() {
   const page = await browser.newPage({ viewport: { width: 1300, height: 800 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(`${BASE}/sim`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/sim?e2e`, { waitUntil: "networkidle" });
   return { browser, page, errors };
 }
 

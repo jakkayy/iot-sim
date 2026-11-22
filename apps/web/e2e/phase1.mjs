@@ -10,16 +10,18 @@ try {
     Object.fromEntries(els.map((e) => [e.getAttribute("data-wire"), e.getAttribute("data-kind")])),
   );
   ok("wire kinds", kinds.w1 === "signal" && kinds.w3 === "ground", JSON.stringify(kinds));
+  await page.click("button:has-text('Checks')");
   ok("no warnings on blink circuit", (await page.locator("[data-testid=no-warnings]").count()) === 1);
 
-  await page.click("text=Run JS demo");
+  await page.selectOption("[aria-label='Simulation speed']", "10");
+  await page.click("[data-testid=run]");
   const fills = new Set();
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 30; i++) {
     fills.add(await page.$eval("[data-component=led1] [data-body]", (e) => e.getAttribute("fill")));
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(60);
   }
   ok("LED visual toggles while running", fills.size === 2, [...fills].join());
-  await page.click("button:has-text('Stop')");
+  await page.click("[data-testid=stop]");
 
   await page.locator("[data-component=r1] rect").first().click();
   await page.keyboard.press("Delete");
@@ -32,6 +34,7 @@ try {
   await page.locator("[data-pin='esp1:GPIO2']").click({ force: true });
   await page.locator("[data-pin='led1:A']").click({ force: true });
   await page.waitForTimeout(200);
+  await page.click("button:has-text('Checks')");
   ok("LED without resistor warns", (await page.locator("[data-code=led-no-resistor]").count()) === 1);
 
   await page.click("[data-testid=lib-button]");

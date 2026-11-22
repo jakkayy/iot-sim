@@ -10,17 +10,19 @@
     "prebuild": "node scripts/copy-wasm.mjs",
     "lint": "tsc --noEmit",
     "test": "bun test --pass-with-no-tests",
-    "e2e": "node e2e/phase1.mjs"
+    "e2e": "node e2e/phase1.mjs && node e2e/phase2.mjs"
   },
   "dependencies": {
+    "@esp32-sim/devices": "workspace:*",
+    "@esp32-sim/runtime-arduino": "workspace:*",
+    "@esp32-sim/runtime-micropython": "workspace:*",
     "@esp32-sim/sim-core": "workspace:*",
+    "@esp32-sim/ui-kit": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.52.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@esp32-sim/runtime-micropython": "workspace:*",
-    "@esp32-sim/runtime-arduino": "workspace:*",
-    "@esp32-sim/devices": "workspace:*",
-    "@esp32-sim/ui-kit": "workspace:*",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

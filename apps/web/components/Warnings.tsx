@@ -11,8 +11,7 @@ const LABEL: Record<CircuitWarning["code"], string> = {
 
 export function Warnings({ warnings }: { warnings: CircuitWarning[] }) {
   return (
-    <section className="w-72 shrink-0 border-l border-gray-300 bg-white p-3" aria-label="Circuit checks">
-      <h2 className="mb-2 text-sm font-semibold">Circuit checks</h2>
+    <section className="bg-white p-3" aria-label="Circuit checks">
       {warnings.length === 0 ? (
         <p className="text-sm text-green-700" data-testid="no-warnings">
           No problems found
