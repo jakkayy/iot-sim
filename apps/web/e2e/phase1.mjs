@@ -4,7 +4,7 @@ const stop = await startServer();
 const { ok, done } = checker();
 const { browser, page, errors } = await openPage();
 try {
-  await page.click("text=Load Blink circuit");
+  await page.selectOption("[aria-label='Template']", "blink");
   await page.waitForTimeout(200);
   const kinds = await page.$$eval("[data-wire]", (els) =>
     Object.fromEntries(els.map((e) => [e.getAttribute("data-wire"), e.getAttribute("data-kind")])),

@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CircuitWarning } from "@esp32-sim/sim-core";
+import { Circuit } from "@esp32-sim/sim-core";
+import { buildTopology, catalog } from "@esp32-sim/devices";
 import { Canvas } from "../../components/Canvas";
+import { Controls } from "../../components/Controls";
 import { CodeEditor, type EditorMarker } from "../../components/CodeEditor";
 import { Library } from "../../components/Library";
 import { SerialMonitor } from "../../components/SerialMonitor";
 import { Warnings } from "../../components/Warnings";
-import { BLINK_DEMO } from "../../lib/demo";
 import { useProject, type Lang } from "../../lib/project";
 import { SerialLog } from "../../lib/serial";
+import { TEMPLATES } from "../../lib/templates";
 import { useCircuit } from "../../lib/store";
 import { useRunner } from "../../lib/useRunner";
 
@@ -19,7 +22,7 @@ export default function SimPage() {
   const [isolated, setIsolated] = useState<boolean | null>(null);
   const [warnings, setWarnings] = useState<CircuitWarning[]>([]);
   const [markers, setMarkers] = useState<EditorMarker[]>([]);
-  const [tab, setTab] = useState<"serial" | "checks">("serial");
+  const [tab, setTab] = useState<"serial" | "checks" | "controls">("serial");
   const serial = useMemo(() => new SerialLog(), []);
   const { lang, code, setLang, setCode } = useProject();
 
@@ -60,7 +63,8 @@ export default function SimPage() {
   const run = () => {
     serial.clear();
     setMarkers([]);
-    runner.start(lang, code[lang]);
+    const circuit = new Circuit(useCircuit.getState().toCircuitData(), catalog);
+    runner.start(lang, code[lang], buildTopology(circuit), useCircuit.getState().values);
   };
 
   const btn =
@@ -106,20 +110,34 @@ export default function SimPage() {
             ))}
           </select>
         </label>
-        <button
+        <select
+          aria-label="Template"
           className={btn}
-          onClick={() => useCircuit.getState().load(BLINK_DEMO.components, BLINK_DEMO.wires)}
+          value=""
           disabled={busy}
+          onChange={(e) => {
+            const t = TEMPLATES.find((x) => x.id === e.target.value);
+            if (!t) return;
+            useCircuit.getState().load(t.components, t.wires, t.values);
+            setCode("py", t.code.py);
+            serial.clear();
+            setMarkers([]);
+          }}
         >
-          Load Blink circuit
-        </button>
+          <option value="">Templates…</option>
+          {TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id} title={t.description}>
+              {t.name}
+            </option>
+          ))}
+        </select>
         <span className="ml-auto text-xs text-gray-500" data-testid="status">
           {runner.state} · isolated: {String(isolated)}
         </span>
       </header>
       <div className="flex min-h-0 flex-1">
         <Library />
-        <Canvas pinsRef={runner.pinsRef} onWarnings={onWarnings} />
+        <Canvas pinsRef={runner.pinsRef} memRef={runner.memRef} onWarnings={onWarnings} />
         <div className="flex w-[460px] shrink-0 flex-col border-l border-gray-300">
           <div className="min-h-0 flex-1" data-testid="editor">
             <CodeEditor
@@ -131,18 +149,28 @@ export default function SimPage() {
           </div>
           <div className="flex h-56 shrink-0 flex-col border-t border-gray-300 bg-white">
             <div className="flex border-b border-gray-200 text-sm">
-              {(["serial", "checks"] as const).map((t) => (
+              {(["serial", "checks", "controls"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
                   className={`px-3 py-1 ${tab === t ? "border-b-2 border-blue-600 font-medium" : "text-gray-500"}`}
                 >
-                  {t === "serial" ? "Serial Monitor" : `Checks${warnings.length ? ` (${warnings.length})` : ""}`}
+                  {t === "serial"
+                    ? "Serial Monitor"
+                    : t === "controls"
+                      ? "Controls"
+                      : `Checks${warnings.length ? ` (${warnings.length})` : ""}`}
                 </button>
               ))}
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              {tab === "serial" ? <SerialMonitor log={serial} /> : <Warnings warnings={warnings} />}
+              {tab === "serial" ? (
+                <SerialMonitor log={serial} />
+              ) : tab === "controls" ? (
+                <Controls />
+              ) : (
+                <Warnings warnings={warnings} />
+              )}
             </div>
           </div>
         </div>

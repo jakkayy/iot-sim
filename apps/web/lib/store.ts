@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { CircuitData, Endpoint, Wire } from "@esp32-sim/sim-core";
+import type { CircuitData, ControlValues, Endpoint, Wire } from "@esp32-sim/sim-core";
+import { defaultValues, devices } from "@esp32-sim/devices";
 
 export interface PlacedView {
   id: string;
@@ -15,7 +16,28 @@ const PREFIX: Record<string, string> = {
   led: "led",
   resistor: "r",
   button: "btn",
+  potentiometer: "pot",
+  ldr: "ldr",
+  pir: "pir",
+  relay: "relay",
+  buzzer: "buzzer",
+  "buzzer-passive": "buzzer",
+  "rgb-led": "rgb",
+  servo: "servo",
+  dht22: "dht",
+  hcsr04: "us",
+  ssd1306: "oled",
+  "lcd-i2c": "lcd",
 };
+
+/** Control values for components that have none yet (new parts, loaded circuits). */
+function seedValues(components: { id: string; type: string }[], values: ControlValues): ControlValues {
+  const next: ControlValues = {};
+  for (const c of components) {
+    next[c.id] = { ...defaultValues(devices[c.type]?.controls), ...values[c.id] };
+  }
+  return next;
+}
 
 export interface CircuitStore {
   components: PlacedView[];
@@ -23,7 +45,10 @@ export interface CircuitStore {
   selection: Selection;
   /** First endpoint of a wire being drawn. */
   pendingWire: Endpoint | null;
+  /** Slider/toggle values per component id. */
+  values: ControlValues;
 
+  setValue(id: string, control: string, value: number): void;
   addComponent(type: string, x: number, y: number): string;
   moveComponent(id: string, x: number, y: number): void;
   select(selection: Selection): void;
@@ -32,7 +57,7 @@ export interface CircuitStore {
   /** Completes the pending wire. Returns false if rejected (same pin, duplicate, none pending). */
   finishWire(endpoint: Endpoint): boolean;
   cancelWire(): void;
-  load(components: PlacedView[], wires: Wire[]): void;
+  load(components: PlacedView[], wires: Wire[], values?: ControlValues): void;
   toCircuitData(): CircuitData;
 }
 
@@ -53,6 +78,11 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
   wires: [],
   selection: null,
   pendingWire: null,
+  values: {},
+
+  setValue(id, control, value) {
+    set((s) => ({ values: { ...s.values, [id]: { ...s.values[id], [control]: value } } }));
+  },
 
   addComponent(type, x, y) {
     const { components } = get();
@@ -62,7 +92,10 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
       if (existing) return existing.id;
     }
     const id = nextId(components, type);
-    set({ components: [...components, { id, type, x, y }] });
+    set((s) => ({
+      components: [...components, { id, type, x, y }],
+      values: { ...s.values, [id]: defaultValues(devices[type]?.controls) },
+    }));
     return id;
   },
 
@@ -80,14 +113,15 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
     if (selection.kind === "wire") {
       set({ wires: wires.filter((w) => w.id !== selection.id), selection: null });
     } else {
-      set({
+      set((s) => ({
+        values: Object.fromEntries(Object.entries(s.values).filter(([id]) => id !== selection.id)),
         components: components.filter((c) => c.id !== selection.id),
         wires: wires.filter(
           (w) => !w.a.startsWith(`${selection.id}:`) && !w.b.startsWith(`${selection.id}:`),
         ),
         selection: null,
         pendingWire: null,
-      });
+      }));
     }
   },
 
@@ -116,8 +150,8 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
     set({ pendingWire: null });
   },
 
-  load(components, wires) {
-    set({ components, wires, selection: null, pendingWire: null });
+  load(components, wires, values = {}) {
+    set({ components, wires, selection: null, pendingWire: null, values: seedValues(components, values) });
   },
 
   toCircuitData() {

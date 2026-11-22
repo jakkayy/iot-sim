@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PinState, VirtualClock, createClockBuffer, createPinBuffer } from "@esp32-sim/sim-core";
+import { PinState, VirtualClock, createClockBuffer, createPinBuffer, type ControlValues } from "@esp32-sim/sim-core";
+import { DeviceMemory, type Topology } from "@esp32-sim/devices";
 import type { StartMessage, WorkerMessage } from "./protocol";
 
 export type RunState = "idle" | "starting" | "running";
@@ -27,6 +28,7 @@ export function useRunner(events: RunnerEvents) {
   const workerRef = useRef<Worker | null>(null);
   const pinsRef = useRef<PinState | null>(null);
   const clockRef = useRef<VirtualClock | null>(null);
+  const memRef = useRef<DeviceMemory | null>(null);
   const speedRef = useRef(1);
   const eventsRef = useRef(events);
   eventsRef.current = events;
@@ -36,11 +38,12 @@ export function useRunner(events: RunnerEvents) {
     workerRef.current = null;
     pinsRef.current = null;
     clockRef.current = null;
+    memRef.current = null;
     setState("idle");
   }, []);
 
   const start = useCallback(
-    (lang: "py" | "ino", code: string) => {
+    (lang: "py" | "ino", code: string, topology: Topology, values: ControlValues) => {
       stop();
       const pinsBuffer = createPinBuffer();
       const clockBuffer = createClockBuffer();
@@ -48,6 +51,11 @@ export function useRunner(events: RunnerEvents) {
       clock.setSpeed(speedRef.current);
       pinsRef.current = new PinState(pinsBuffer);
       clockRef.current = clock;
+      const mem = DeviceMemory.create(topology.devices);
+      for (const [id, controls] of Object.entries(values)) {
+        for (const [k, v] of Object.entries(controls)) mem.set(id, k, v);
+      }
+      memRef.current = mem;
 
       const worker = new Worker(new URL("../app/sim/runtime.worker.ts", import.meta.url));
       worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
@@ -72,6 +80,8 @@ export function useRunner(events: RunnerEvents) {
         code,
         pinsBuffer,
         clockBuffer,
+        deviceBuffer: mem.buffer,
+        topology,
         urls: {
           micropythonLoader: abs("/micropython/micropython.mjs"),
           micropythonWasm: abs("/micropython/micropython.wasm"),
@@ -98,5 +108,5 @@ export function useRunner(events: RunnerEvents) {
 
   useEffect(() => () => workerRef.current?.terminate(), []);
 
-  return { state, speed, setSpeed, start, stop, reset, pinsRef };
+  return { state, speed, setSpeed, start, stop, reset, pinsRef, memRef };
 }

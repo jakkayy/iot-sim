@@ -1,3 +1,5 @@
+import type { Topology } from "@esp32-sim/devices";
+
 /** Messages between the UI thread and the runtime Worker. */
 export interface StartMessage {
   type: "start";
@@ -5,6 +7,9 @@ export interface StartMessage {
   code: string;
   pinsBuffer: SharedArrayBuffer;
   clockBuffer: SharedArrayBuffer;
+  /** Shared control values, powered flags and display frames (see devices/memory). */
+  deviceBuffer: SharedArrayBuffer;
+  topology: Topology;
   /** Absolute URLs (same origin; required under COEP). */
   urls: { micropythonLoader: string; micropythonWasm: string; sketch?: string };
 }

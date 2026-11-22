@@ -1,4 +1,5 @@
 import { PinState, SimHal, VirtualClock } from "@esp32-sim/sim-core";
+import { DeviceMemory, attachDevices, computeLayout } from "@esp32-sim/devices";
 import { startMicroPython } from "@esp32-sim/runtime-micropython";
 import { loadSketch, runSketch } from "@esp32-sim/runtime-arduino";
 import type { StartMessage, WorkerMessage } from "../../lib/protocol";
@@ -13,6 +14,11 @@ self.onmessage = async (e: MessageEvent<StartMessage>) => {
     clock: new VirtualClock(msg.clockBuffer),
   });
   try {
+    attachDevices(
+      hal,
+      msg.topology,
+      new DeviceMemory(msg.deviceBuffer, computeLayout(msg.topology.devices)),
+    );
     if (msg.lang === "py") {
       const session = await startMicroPython({
         loaderUrl: msg.urls.micropythonLoader,

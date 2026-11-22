@@ -22,7 +22,7 @@ try {
   ok("monaco editor loads", true);
 
   // 1. Blink (default program) at 10x so the test is quick.
-  await page.click("text=Load Blink circuit");
+  await page.selectOption("[aria-label='Template']", "blink");
   await page.selectOption("[aria-label='Simulation speed']", "10");
   await page.click("[data-testid=run]");
   await page.waitForFunction(() => document.querySelector("[data-testid=status]")?.textContent?.startsWith("running"), null, { timeout: 15000 });

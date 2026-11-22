@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Circuit, PinState, createPinBuffer, type CircuitWarning } from "@esp32-sim/sim-core";
-import { catalog, devices, pinDir } from "@esp32-sim/devices";
+import { catalog, devices, pinDir, type DeviceMemory } from "@esp32-sim/devices";
 import { DeviceBody, applyVisual } from "@esp32-sim/ui-kit";
 import { useCircuit } from "../lib/store";
 import { routeWire } from "../lib/route";
@@ -18,10 +18,13 @@ const WIRE_COLOR = { power: "#dc2626", ground: "#111827", signal: "#2563eb" } as
 
 export function Canvas({
   pinsRef,
+  memRef,
   onWarnings,
 }: {
   /** Pin state of the running program, or null when stopped. */
   pinsRef: MutableRefObject<PinState | null>;
+  /** Shared device memory of the running program, or null when stopped. */
+  memRef: MutableRefObject<DeviceMemory | null>;
   onWarnings: (w: CircuitWarning[]) => void;
 }) {
   const components = useCircuit((s) => s.components);
@@ -64,7 +67,16 @@ export function Canvas({
     const frame = () => {
       const running = pinsRef.current;
       const pins = running ?? idlePins.current;
-      const ev = circuit.evaluate(pins, pressedRef.current);
+      const state = store.getState();
+      const ev = circuit.evaluate(pins, pressedRef.current, state.values);
+      const mem = memRef.current;
+      if (mem) {
+        // Feed the Worker: slider values, and which modules are powered.
+        for (const [id, controls] of Object.entries(state.values)) {
+          for (const [k, v] of Object.entries(controls)) mem.set(id, k, v);
+        }
+        for (const [id, out] of ev.outputs) mem.set(id, "powered", out.powered ?? 0);
+      }
       if (running) {
         circuit.applyInputs(running, ev);
         const sig = [...ev.gpioInput].map(([g, l]) => `${g}:${l}`).join(",");
@@ -73,9 +85,17 @@ export function Canvas({
           running.notifyWake(); // let a sleeping program poll interrupts right away
         }
       }
-      for (const c of store.getState().components) {
+      for (const c of state.components) {
         const g = groupRefs.current[c.id];
-        if (g) applyVisual(c.type, g, { brightness: ev.leds.get(c.id) ?? 0, pressed: !!pressedRef.current[c.id] });
+        if (g) {
+          applyVisual(c.type, g, {
+            brightness: ev.leds.get(c.id) ?? 0,
+            pressed: !!pressedRef.current[c.id],
+            outputs: ev.outputs.get(c.id),
+            values: state.values[c.id],
+            frame: mem?.frame(c.id) ?? null,
+          });
+        }
       }
       const key = ev.warnings.map((w) => `${w.code}|${w.endpoints.join(",")}`).join(";");
       if (key !== lastKey) {
@@ -87,7 +107,7 @@ export function Canvas({
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [circuit, pinsRef, onWarnings, store]);
+  }, [circuit, pinsRef, memRef, onWarnings, store]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
