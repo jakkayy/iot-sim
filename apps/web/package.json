@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "predev": "node scripts/copy-wasm.mjs",
-    "prebuild": "node scripts/copy-wasm.mjs"
+    "prebuild": "node scripts/copy-wasm.mjs",
+    "lint": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@esp32-sim/sim-core": "workspace:*",

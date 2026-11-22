@@ -8,5 +8,11 @@
   "dependencies": {
     "@esp32-sim/sim-core": "workspace:*",
     "@micropython/micropython-webassembly-pyscript": "1.29.0-6"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
   }
 }
