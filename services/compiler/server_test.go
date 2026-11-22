@@ -16,20 +16,39 @@ import (
 	"time"
 )
 
-// A valid wasm module importing only allowed functions (env.pinMode, func type 0).
-var okWasm = func() []byte {
-	imp := []byte{1, 3, 'e', 'n', 'v', 7, 'p', 'i', 'n', 'M', 'o', 'd', 'e', 0, 0}
-	out := []byte("\x00asm\x01\x00\x00\x00")
-	out = append(out, 2, byte(len(imp)))
-	return append(out, imp...)
+// exportSection exports memory, sim_setup and sim_loop (function indices 0 and 1).
+var exportSection = func() []byte {
+	body := []byte{3}
+	for _, e := range []struct {
+		name string
+		kind byte
+		idx  byte
+	}{{"memory", 2, 0}, {"sim_setup", 0, 0}, {"sim_loop", 0, 1}} {
+		body = append(body, byte(len(e.name)))
+		body = append(body, e.name...)
+		body = append(body, e.kind, e.idx)
+	}
+	return append([]byte{7, byte(len(body))}, body...)
 }()
 
-var badWasm = func() []byte { // imports env.WiFi_begin which the simulator lacks
-	imp := []byte{1, 3, 'e', 'n', 'v', 10, 'W', 'i', 'F', 'i', '_', 'b', 'e', 'g', 'i', 'n', 0, 0}
+func moduleWith(importBody []byte, exports bool) []byte {
 	out := []byte("\x00asm\x01\x00\x00\x00")
-	out = append(out, 2, byte(len(imp)))
-	return append(out, imp...)
-}()
+	out = append(out, 2, byte(len(importBody)))
+	out = append(out, importBody...)
+	if exports {
+		out = append(out, exportSection...)
+	}
+	return out
+}
+
+// A valid wasm module importing only allowed functions (env.pinMode, func type 0).
+var okWasm = moduleWith([]byte{1, 3, 'e', 'n', 'v', 7, 'p', 'i', 'n', 'M', 'o', 'd', 'e', 0, 0}, true)
+
+// Imports env.WiFi_begin which the simulator lacks.
+var badWasm = moduleWith([]byte{1, 3, 'e', 'n', 'v', 10, 'W', 'i', 'F', 'i', '_', 'b', 'e', 'g', 'i', 'n', 0, 0}, true)
+
+// Valid imports but no entry points: what a bad link would produce.
+var noEntryWasm = moduleWith([]byte{1, 3, 'e', 'n', 'v', 7, 'p', 'i', 'n', 'M', 'o', 'd', 'e', 0, 0}, false)
 
 type fakeRunner struct {
 	calls atomic.Int32
@@ -178,6 +197,20 @@ func TestTimeoutAndSandboxFailuresAreNotCached(t *testing.T) {
 	got := decode(t, body)
 	if got.OK || strings.Contains(string(body), "docker.sock") {
 		t.Fatalf("internal errors must not leak details: %s", body)
+	}
+}
+
+func TestProgramWithoutEntryPointsIsRejectedAndNotCached(t *testing.T) {
+	fr := &fakeRunner{out: RunOutput{Wasm: noEntryWasm}}
+	_, ts := testServer(t, fr, nil, nil)
+	_, body := post(t, ts.URL, goodSketch+`}`, nil)
+	if got := decode(t, body); got.OK || !strings.Contains(got.Diags[0].Message, "incomplete") {
+		t.Fatalf("a wasm without sim_setup/sim_loop must not be served: %+v", got)
+	}
+	fr.out = RunOutput{Wasm: okWasm}
+	_, body = post(t, ts.URL, goodSketch+`}`, nil)
+	if got := decode(t, body); !got.OK {
+		t.Fatalf("a bad link must not poison the cache: %+v", got)
 	}
 }
 

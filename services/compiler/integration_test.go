@@ -57,6 +57,11 @@ func TestIntegrationCompilesBlinkFast(t *testing.T) {
 	if err != nil || len(bad) != 0 {
 		t.Fatalf("imports: %v %v", bad, err)
 	}
+	// A program that links but exports nothing is useless; this once slipped through when the
+	// entry points sat in an archive member the linker dropped.
+	if missing, err := MissingEntryPoints(out.Wasm); err != nil || len(missing) != 0 {
+		t.Fatalf("compiled program lacks entry points %v (err %v)", missing, err)
+	}
 }
 
 func TestIntegrationErrorsPointAtTheUsersLines(t *testing.T) {

@@ -13,7 +13,3 @@ mkdirSync(dest, { recursive: true });
 for (const f of ["micropython.wasm", "micropython.mjs"]) cpSync(join(pkgDir, f), join(dest, f));
 console.log("copied micropython.wasm + micropython.mjs ->", dest, existsSync(dest) && readdirSync(dest));
 
-// Spike: ship the pre-compiled blink sketch. Phase 4 replaces this with the compile service.
-const arduinoDest = join(here, "../public/arduino");
-mkdirSync(arduinoDest, { recursive: true });
-cpSync(join(here, "../../../packages/runtime-arduino/fixtures/blink.wasm"), join(arduinoDest, "blink.wasm"));

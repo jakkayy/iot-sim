@@ -187,3 +187,67 @@ func demangle(name string) string {
 	}
 	return strings.Join(parts, "::")
 }
+
+// WasmExports returns the names exported by the module's export section.
+func WasmExports(wasm []byte) ([]string, error) {
+	if len(wasm) < 8 || string(wasm[:4]) != "\x00asm" {
+		return nil, errors.New("not a wasm module")
+	}
+	p := 8
+	for p < len(wasm) {
+		id := wasm[p]
+		size, n, err := readULEB(wasm, p+1)
+		if err != nil {
+			return nil, err
+		}
+		start := p + 1 + n
+		end := start + int(size)
+		if end > len(wasm) {
+			return nil, errors.New("truncated section")
+		}
+		if id == 7 {
+			b := wasm[start:end]
+			count, n, err := readULEB(b, 0)
+			if err != nil {
+				return nil, err
+			}
+			q := n
+			var out []string
+			for i := uint64(0); i < count; i++ {
+				l, n, err := readULEB(b, q)
+				if err != nil || q+n+int(l)+2 > len(b) {
+					return nil, errors.New("bad export")
+				}
+				out = append(out, string(b[q+n:q+n+int(l)]))
+				q += n + int(l) + 1 // kind byte
+				_, n, err = readULEB(b, q)
+				if err != nil {
+					return nil, err
+				}
+				q += n
+			}
+			return out, nil
+		}
+		p = end
+	}
+	return nil, nil
+}
+
+// MissingEntryPoints reports which of the functions the runtime calls are not exported.
+func MissingEntryPoints(wasm []byte) ([]string, error) {
+	exports, err := WasmExports(wasm)
+	if err != nil {
+		return nil, err
+	}
+	have := map[string]bool{}
+	for _, e := range exports {
+		have[e] = true
+	}
+	var missing []string
+	for _, need := range []string{"sim_setup", "sim_loop", "memory"} {
+		if !have[need] {
+			missing = append(missing, need)
+		}
+	}
+	return missing, nil
+}

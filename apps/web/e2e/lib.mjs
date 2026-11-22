@@ -5,6 +5,8 @@ import { chromium } from "playwright-core";
 
 export const PORT = Number(process.env.E2E_PORT ?? 3111);
 export const BASE = `http://localhost:${PORT}`;
+// The compile service the Arduino tests talk to (docker compose stack or `go run`).
+export const COMPILE_URL = process.env.COMPILE_URL ?? "http://localhost:8788";
 
 export async function startServer() {
   const proc = spawn("bunx", ["next", "start", "-p", String(PORT)], {
@@ -22,7 +24,7 @@ export async function startServer() {
   throw new Error("server did not start");
 }
 
-export async function openPage() {
+export async function openPage(compileUrl = COMPILE_URL) {
   const browser = await chromium.launch({
     executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome",
     args: ["--no-sandbox"],
@@ -30,7 +32,7 @@ export async function openPage() {
   const page = await browser.newPage({ viewport: { width: 1300, height: 800 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(`${BASE}/sim?e2e`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/sim?e2e&compile=${encodeURIComponent(compileUrl)}`, { waitUntil: "networkidle" });
   return { browser, page, errors };
 }
 

@@ -6,6 +6,9 @@ set -eu
 OBJ="$(mktemp -d)"
 mkdir -p "$SHIM/lib"
 for f in "$SHIM"/src/*.cpp; do
+  # main.cpp holds the exported entry points; nothing references it, so inside an archive the
+  # linker would silently drop it. compile.sh links it as a plain object instead.
+  [ "$(basename "$f")" = "main.cpp" ] && continue
   # shellcheck disable=SC2086
   clang++ $SHIM_CXXFLAGS -c "$f" -o "$OBJ/$(basename "$f" .cpp).o"
 done

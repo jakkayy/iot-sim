@@ -83,3 +83,20 @@ func TestAllowedImportsMatchShimHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestWasmExportsAndMissingEntryPoints(t *testing.T) {
+	got, err := WasmExports(okWasm)
+	if err != nil || strings.Join(got, ",") != "memory,sim_setup,sim_loop" {
+		t.Fatalf("exports: %v %v", got, err)
+	}
+	if m, _ := MissingEntryPoints(okWasm); len(m) != 0 {
+		t.Errorf("complete program reported missing %v", m)
+	}
+	m, err := MissingEntryPoints(noEntryWasm)
+	if err != nil || strings.Join(m, ",") != "sim_setup,sim_loop,memory" {
+		t.Errorf("missing: %v %v", m, err)
+	}
+	if _, err := WasmExports([]byte("garbage")); err == nil {
+		t.Error("garbage must be an error")
+	}
+}

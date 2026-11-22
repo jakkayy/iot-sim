@@ -34,8 +34,9 @@ self.onmessage = async (e: MessageEvent<StartMessage>) => {
       }
       send({ type: "exit" });
     } else {
-      const wasm = await (await fetch(msg.urls.sketch!)).arrayBuffer();
-      const sketch = await loadSketch(wasm, hal);
+      const sketch = await loadSketch(msg.sketchWasm!, hal, {
+        onStdout: (text) => send({ type: "stdout", text }),
+      });
       send({ type: "ready" });
       runSketch(sketch); // blocks; Stop terminates the worker
     }

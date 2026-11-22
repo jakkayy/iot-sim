@@ -8,8 +8,8 @@ export interface Template {
   components: PlacedView[];
   wires: Wire[];
   values?: ControlValues;
-  /** Program per language. Arduino versions arrive with the compile service. */
-  code: { py: string; ino?: string };
+  /** The same program in both languages. */
+  code: { py: string; ino: string };
 }
 
 const ESP: PlacedView = { id: "esp1", type: "esp32-devkit", x: 60, y: 20 };
@@ -43,6 +43,17 @@ while True:
     led.value(0)
     time.sleep(0.5)
 `,
+      ino: `void setup() {
+  pinMode(2, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(2, HIGH);
+  delay(500);
+  digitalWrite(2, LOW);
+  delay(500);
+}
+`,
     },
   },
   {
@@ -72,6 +83,19 @@ button = Pin(4, Pin.IN, Pin.PULL_UP)  # pressed reads 0
 while True:
     led.value(0 if button.value() else 1)
     time.sleep_ms(10)
+`,
+      ino: `const int LED = 2;
+const int BUTTON = 4;
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  pinMode(BUTTON, INPUT_PULLUP);  // pressed reads LOW
+}
+
+void loop() {
+  digitalWrite(LED, digitalRead(BUTTON) ? LOW : HIGH);
+  delay(10);
+}
 `,
     },
   },
@@ -104,6 +128,18 @@ led = PWM(Pin(2), freq=1000)
 while True:
     led.duty_u16(pot.read_u16())
     time.sleep_ms(20)
+`,
+      ino: `const int LED = 2;
+const int POT = 32;
+
+void setup() {
+  ledcAttach(LED, 1000, 12);  // 1 kHz, 12-bit duty
+}
+
+void loop() {
+  ledcWrite(LED, analogRead(POT));  // ADC is 12-bit too
+  delay(20);
+}
 `,
     },
   },
@@ -144,6 +180,40 @@ while True:
     print(sensor.temperature(), sensor.humidity())
     time.sleep(2)
 `,
+      ino: `#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <DHT.h>
+
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+DHT dht(4, DHT22);
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(21, 22);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  dht.begin();
+}
+
+void loop() {
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 8);
+  display.print("Temp: ");
+  display.print(t, 1);
+  display.println(" C");
+  display.setCursor(0, 24);
+  display.print("Hum:  ");
+  display.print(h, 1);
+  display.println(" %");
+  display.display();
+  Serial.printf("%.2f %.2f\\n", t, h);
+  delay(2000);
+}
+`,
     },
   },
   {
@@ -179,6 +249,19 @@ relay = Pin(5, Pin.OUT)
 while True:
     relay.value(pir.value())
     time.sleep_ms(50)
+`,
+      ino: `const int PIR = 4;
+const int RELAY = 5;
+
+void setup() {
+  pinMode(PIR, INPUT);
+  pinMode(RELAY, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(RELAY, digitalRead(PIR));
+  delay(50);
+}
 `,
     },
   },
@@ -225,6 +308,39 @@ while True:
         lcd.putstr("%.1f cm" % (us / 58))
         print("%.1f cm" % (us / 58))
     time.sleep_ms(500)
+`,
+      ino: `#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+const int TRIG = 5;
+const int ECHO = 18;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+  lcd.init();
+  lcd.backlight();
+}
+
+void loop() {
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long us = pulseIn(ECHO, HIGH, 30000);
+  lcd.clear();
+  if (us == 0) {
+    lcd.print("No echo");
+  } else {
+    lcd.print("Distance:");
+    lcd.setCursor(0, 1);
+    lcd.print(us / 58.0, 1);
+    lcd.print(" cm");
+    Serial.printf("%.1f cm\\n", us / 58.0);
+  }
+  delay(500);
+}
 `,
     },
   },

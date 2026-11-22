@@ -10,6 +10,7 @@ import { CodeEditor, type EditorMarker } from "../../components/CodeEditor";
 import { Library } from "../../components/Library";
 import { SerialMonitor } from "../../components/SerialMonitor";
 import { Warnings } from "../../components/Warnings";
+import { splitDiags } from "../../lib/compile";
 import { download, exportFiles, makeZip } from "../../lib/export";
 import { createAutosaver, dexieStorage, parseProject, PROJECT_VERSION, type SavedProject } from "../../lib/persist";
 import { DEFAULT_INO, DEFAULT_PY, useProject, type Lang } from "../../lib/project";
@@ -34,6 +35,11 @@ export default function SimPage() {
     onError: (message, line, printed) => {
       if (!printed) serial.push(message);
       if (line) setMarkers([{ line, message }]);
+    },
+    onDiags: (diags) => {
+      const { markers, text } = splitDiags(diags);
+      if (text.length) serial.push(text.join("\n"));
+      setMarkers(markers);
     },
     onReset: () => {
       serial.clear();
@@ -113,7 +119,7 @@ export default function SimPage() {
     serial.clear();
     setMarkers([]);
     const circuit = new Circuit(useCircuit.getState().toCircuitData(), catalog);
-    runner.start(lang, code[lang], buildTopology(circuit), useCircuit.getState().values);
+    void runner.start(lang, code[lang], buildTopology(circuit), useCircuit.getState().values);
   };
 
   const exportProject = () => {
@@ -146,9 +152,7 @@ export default function SimPage() {
           onChange={(e) => setLang(e.target.value as Lang)}
         >
           <option value="py">MicroPython</option>
-          <option value="ino" disabled>
-            Arduino (coming soon)
-          </option>
+          <option value="ino">Arduino (C++)</option>
         </select>
         <button className={btn} onClick={run} disabled={busy || !isolated} data-testid="run">
           ▶ Run
@@ -185,6 +189,7 @@ export default function SimPage() {
             useCircuit.getState().commit();
             useCircuit.getState().load(t.components, t.wires, t.values);
             setCode("py", t.code.py);
+            setCode("ino", t.code.ino);
             serial.clear();
             setMarkers([]);
           }}

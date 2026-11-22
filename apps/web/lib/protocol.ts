@@ -11,7 +11,9 @@ export interface StartMessage {
   deviceBuffer: SharedArrayBuffer;
   topology: Topology;
   /** Absolute URLs (same origin; required under COEP). */
-  urls: { micropythonLoader: string; micropythonWasm: string; sketch?: string };
+  /** Compiled Arduino program (Arduino mode only). */
+  sketchWasm?: ArrayBuffer;
+  urls: { micropythonLoader: string; micropythonWasm: string };
 }
 
 export type WorkerMessage =

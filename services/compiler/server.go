@@ -229,6 +229,10 @@ func (s *Server) compile(ctx context.Context, files []File) (*Result, bool) {
 	if int64(len(out.Wasm)) > s.cfg.MaxWasmBytes {
 		return &Result{Diags: []Diag{{Severity: "error", Message: fmt.Sprintf("the compiled program is too large (limit %d KB)", s.cfg.MaxWasmBytes/1024)}}}, true
 	}
+	if missing, err := MissingEntryPoints(out.Wasm); err != nil || len(missing) > 0 {
+		s.log.Error("sandbox produced a program without entry points", "missing", missing, "err", err)
+		return &Result{Diags: []Diag{{Severity: "error", Message: "the compile service produced an incomplete program"}}}, false
+	}
 	unsupported, err := UnsupportedImports(out.Wasm)
 	if err != nil {
 		s.log.Error("bad wasm from sandbox", "err", err)

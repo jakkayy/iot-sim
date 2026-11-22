@@ -19,9 +19,23 @@ describe("templates", () => {
         expect(circuit.evaluate(null).warnings).toEqual([]);
       });
 
-      test("has a MicroPython program", () => {
+      test("has a program in both languages", () => {
         expect(t.code.py.length).toBeGreaterThan(40);
+        expect(t.code.ino).toContain("void setup()");
+        expect(t.code.ino).toContain("void loop()");
       });
+
+      // Optional live check: COMPILE_URL=http://localhost:8788 bun test lib/templates.test.ts
+      test.skipIf(!process.env.COMPILE_URL)("the Arduino version compiles on the real service", async () => {
+        const res = await fetch(`${process.env.COMPILE_URL}/compile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: process.env.COMPILE_ORIGIN ?? "http://localhost:3111" },
+          body: JSON.stringify({ files: [{ name: "sketch.ino", content: t.code.ino }] }),
+        });
+        const body = (await res.json()) as { ok: boolean; diags: unknown[] };
+        expect(body.diags.filter((d) => (d as { severity: string }).severity === "error")).toEqual([]);
+        expect(body.ok).toBe(true);
+      }, 60000);
 
       test("control overrides only name real controls", () => {
         for (const [id, vals] of Object.entries(t.values ?? {})) {

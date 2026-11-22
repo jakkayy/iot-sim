@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PinState, VirtualClock, createClockBuffer, createPinBuffer, type ControlValues } from "@esp32-sim/sim-core";
 import { DeviceMemory, type Topology } from "@esp32-sim/devices";
+import { compileSketch, type Diag } from "./compile";
+import { compileUrl } from "./config";
 import type { StartMessage, WorkerMessage } from "./protocol";
 
-export type RunState = "idle" | "starting" | "running";
+export type RunState = "idle" | "compiling" | "starting" | "running";
 
 export interface RunnerEvents {
   onStdout(text: string): void;
   onStderr(text: string): void;
   onError(message: string, line?: number, printed?: boolean): void;
+  /** Compiler messages (Arduino): errors and warnings, already sanitised by the service. */
+  onDiags(diags: Diag[]): void;
   onReset(): void;
 }
 
@@ -30,10 +34,15 @@ export function useRunner(events: RunnerEvents) {
   const clockRef = useRef<VirtualClock | null>(null);
   const memRef = useRef<DeviceMemory | null>(null);
   const speedRef = useRef(1);
+  const runIdRef = useRef(0);
+  const compileAbortRef = useRef<AbortController | null>(null);
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
   const stop = useCallback(() => {
+    runIdRef.current++; // invalidates a compile that is still in flight
+    compileAbortRef.current?.abort();
+    compileAbortRef.current = null;
     workerRef.current?.terminate();
     workerRef.current = null;
     pinsRef.current = null;
@@ -43,8 +52,24 @@ export function useRunner(events: RunnerEvents) {
   }, []);
 
   const start = useCallback(
-    (lang: "py" | "ino", code: string, topology: Topology, values: ControlValues) => {
+    async (lang: "py" | "ino", code: string, topology: Topology, values: ControlValues) => {
       stop();
+      const runId = runIdRef.current;
+      let sketchWasm: ArrayBuffer | undefined;
+      if (lang === "ino") {
+        setState("compiling");
+        const ctl = new AbortController();
+        compileAbortRef.current = ctl;
+        const result = await compileSketch(code, { url: compileUrl(), signal: ctl.signal });
+        if (runId !== runIdRef.current) return; // Stop/Reset/another Run happened meanwhile
+        compileAbortRef.current = null;
+        eventsRef.current.onDiags(result.diags);
+        if (!result.ok) {
+          setState("idle");
+          return;
+        }
+        sketchWasm = result.wasm;
+      }
       const pinsBuffer = createPinBuffer();
       const clockBuffer = createClockBuffer();
       const clock = new VirtualClock(clockBuffer, undefined, true);
@@ -82,13 +107,13 @@ export function useRunner(events: RunnerEvents) {
         clockBuffer,
         deviceBuffer: mem.buffer,
         topology,
+        sketchWasm,
         urls: {
           micropythonLoader: abs("/micropython/micropython.mjs"),
           micropythonWasm: abs("/micropython/micropython.wasm"),
-          sketch: abs("/arduino/blink.wasm"),
         },
       };
-      worker.postMessage(msg);
+      worker.postMessage(msg, sketchWasm ? [sketchWasm] : []);
       workerRef.current = worker;
       setState("starting");
     },
