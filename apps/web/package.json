@@ -9,7 +9,8 @@
     "predev": "node scripts/copy-wasm.mjs",
     "prebuild": "node scripts/copy-wasm.mjs",
     "lint": "tsc --noEmit",
-    "test": "bun test --pass-with-no-tests"
+    "test": "bun test --pass-with-no-tests",
+    "e2e": "node e2e/phase1.mjs"
   },
   "dependencies": {
     "@esp32-sim/sim-core": "workspace:*",
@@ -17,12 +18,20 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "@esp32-sim/runtime-micropython": "workspace:*",
-    "@esp32-sim/runtime-arduino": "workspace:*"
+    "@esp32-sim/runtime-arduino": "workspace:*",
+    "@esp32-sim/devices": "workspace:*",
+    "@esp32-sim/ui-kit": "workspace:*",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "postcss": "^8.4.0",
+    "@types/bun": "latest",
+    "playwright-core": "^1.50.0"
   }
 }

@@ -1,32 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { PinState, createPinBuffer } from "@esp32-sim/sim-core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PinState, createPinBuffer, type CircuitWarning } from "@esp32-sim/sim-core";
+import { Canvas } from "../../components/Canvas";
+import { Library } from "../../components/Library";
+import { Warnings } from "../../components/Warnings";
+import { BLINK_DEMO } from "../../lib/demo";
+import { useCircuit } from "../../lib/store";
+
+type Lang = "js" | "py" | "ino";
 
 export default function SimPage() {
   const [isolated, setIsolated] = useState<boolean | null>(null);
   const [running, setRunning] = useState(false);
-  const ledRef = useRef<HTMLDivElement>(null);
+  const [warnings, setWarnings] = useState<CircuitWarning[]>([]);
+  const [log, setLog] = useState<string[]>([]);
   const workerRef = useRef<Worker | null>(null);
   const pinsRef = useRef<PinState | null>(null);
 
   useEffect(() => setIsolated(window.crossOriginIsolated), []);
-
-  // UI reads pin state every frame; no setState per pin change.
   useEffect(() => {
-    let raf = 0;
-    const frame = () => {
-      const on = pinsRef.current?.readDigital(2) === 1;
-      if (ledRef.current) ledRef.current.style.background = on ? "#ff3b30" : "#444";
-      raf = requestAnimationFrame(frame);
-    };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    if (useCircuit.getState().components.length === 0) {
+      useCircuit.getState().addComponent("esp32-devkit", 60, 20);
+    }
   }, []);
 
-  const [log, setLog] = useState<string[]>([]);
-
-  const run = (lang: "js" | "py" | "ino") => {
+  const run = (lang: Lang) => {
     const buffer = createPinBuffer();
     pinsRef.current = new PinState(buffer);
     setLog([]);
@@ -59,20 +58,37 @@ export default function SimPage() {
     setRunning(false);
   };
 
+  const onWarnings = useCallback((w: CircuitWarning[]) => setWarnings(w), []);
+
+  const disabled = running || !isolated;
+  const btn = "rounded border border-gray-300 bg-white px-2 py-1 text-sm hover:bg-gray-100 disabled:opacity-40";
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Simulator (spike)</h1>
-      <p>crossOriginIsolated: {String(isolated)}</p>
-      <div
-        ref={ledRef}
-        data-testid="led"
-        style={{ width: 32, height: 32, borderRadius: 16, background: "#444", margin: "12px 0" }}
-      />
-      <button onClick={() => run("js")} disabled={running || !isolated}>Run JS</button>{" "}
-      <button onClick={() => run("py")} disabled={running || !isolated}>Run MicroPython</button>{" "}
-      <button onClick={() => run("ino")} disabled={running || !isolated}>Run Arduino</button>{" "}
-      <button onClick={stop} disabled={!running}>Stop</button>
-      <pre data-testid="log">{log.join("\n")}</pre>
-    </main>
+    <div className="flex h-full flex-col bg-gray-50 text-gray-900">
+      <header className="flex flex-wrap items-center gap-2 border-b border-gray-300 bg-white px-3 py-2">
+        <h1 className="mr-2 font-semibold">ESP32 Simulator</h1>
+        <button className={btn} onClick={() => useCircuit.getState().load(BLINK_DEMO.components, BLINK_DEMO.wires)}>
+          Load Blink circuit
+        </button>
+        <span className="mx-1 text-gray-300">|</span>
+        <button className={btn} onClick={() => run("js")} disabled={disabled}>Run JS demo</button>
+        <button className={btn} onClick={() => run("py")} disabled={disabled}>Run MicroPython demo</button>
+        <button className={btn} onClick={() => run("ino")} disabled={disabled}>Run Arduino demo</button>
+        <button className={btn} onClick={stop} disabled={!running}>Stop</button>
+        <span className="ml-auto text-xs text-gray-500">
+          isolated: {String(isolated)}
+        </span>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <Library />
+        <Canvas pinsRef={pinsRef} onWarnings={onWarnings} />
+        <div className="flex w-72 shrink-0 flex-col">
+          <Warnings warnings={warnings} />
+          <pre data-testid="log" className="min-h-0 flex-1 overflow-auto border-l border-t border-gray-300 bg-white p-2 text-xs">
+            {log.join("\n")}
+          </pre>
+        </div>
+      </div>
+    </div>
   );
 }
