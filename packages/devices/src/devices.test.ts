@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Circuit, PinMode, PinState, createPinBuffer } from "@esp32-sim/sim-core";
-import { catalog, devices, esp32Devkit, gpioNumber, pinHint } from "./index";
+import { catalog, devices, esp32Devkit, gpioNumber, pinDir, pinHint } from "./index";
 
 describe("device definitions", () => {
   test("geometry pins match element pins for every device", () => {
@@ -28,6 +28,16 @@ describe("device definitions", () => {
     expect(pinHint("GPIO32").join()).toContain("ADC1");
     expect(pinHint("GPIO4").join()).toContain("ADC2");
     expect(pinHint("5V").join()).toContain("never");
+  });
+});
+
+describe("pin directions", () => {
+  test("wires leave pins toward the device edge", () => {
+    const find = (d: (typeof devices)[string], n: string) => d.pins.find((p) => p.name === n)!;
+    expect(pinDir(esp32Devkit, find(esp32Devkit, "GPIO2"))).toBe("right");
+    expect(pinDir(esp32Devkit, find(esp32Devkit, "GPIO34"))).toBe("left");
+    expect(pinDir(devices.led, find(devices.led, "A"))).toBe("down");
+    expect(pinDir(devices.resistor, find(devices.resistor, "2"))).toBe("right");
   });
 });
 

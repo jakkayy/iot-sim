@@ -163,3 +163,16 @@ describe("open-drain bus with external pull-up", () => {
     expect(codes(circuit, pins)).not.toContain("short");
   });
 });
+
+describe("net kinds (wire colouring)", () => {
+  test("supply nets are power/ground, everything else is signal", () => {
+    const c = build(
+      [board, { id: "r", type: "res" }],
+      [w("esp:3V3", "r:1"), w("r:2", "esp:GPIO4"), w("esp:GPIO5", "esp:GND")],
+    );
+    const ev = c.evaluate(null);
+    expect(ev.netKind.get(ev.netOf.get("esp:3V3")!)).toBe("power");
+    expect(ev.netKind.get(ev.netOf.get("esp:GND")!)).toBe("ground");
+    expect(ev.netKind.get(ev.netOf.get("esp:GPIO4")!)).toBe("signal");
+  });
+});

@@ -1,7 +1,7 @@
 import type { Catalog } from "@esp32-sim/sim-core";
 import { esp32Devkit } from "./esp32";
 import { button, led, resistor } from "./parts";
-import type { DeviceDef } from "./types";
+import type { DeviceDef, PinDir, PinGeometry } from "./types";
 
 export * from "./types";
 export { esp32Devkit, gpioNumber, pinHint } from "./esp32";
@@ -15,3 +15,11 @@ export const devices: Record<string, DeviceDef> = Object.fromEntries(
 export const catalog: Catalog = Object.fromEntries(
   Object.values(devices).map((d) => [d.type, d.element]),
 );
+
+/** Direction a wire should leave a pin: explicit, else toward the nearest device edge. */
+export function pinDir(def: DeviceDef, pin: PinGeometry): PinDir {
+  if (pin.dir) return pin.dir;
+  if (pin.x <= 0) return "left";
+  if (pin.x >= def.width) return "right";
+  return pin.y >= def.height ? "down" : "up";
+}

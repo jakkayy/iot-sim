@@ -52,6 +52,7 @@ export interface CircuitWarning {
 }
 
 export type Level = 0 | 1;
+export type NetKind = "power" | "ground" | "signal";
 
 export interface Evaluation {
   /** Net id (root endpoint) per endpoint. */
@@ -62,6 +63,8 @@ export interface Evaluation {
   gpioInput: Map<number, Level>;
   /** 0 or 1 per LED component. */
   leds: Map<string, Level>;
+  /** Wire colouring: nets touching a supply high / low rail, otherwise signal. */
+  netKind: Map<string, NetKind>;
   warnings: CircuitWarning[];
 }
 
@@ -306,7 +309,12 @@ export class Circuit {
       }
     }
 
-    return { netOf, levels, gpioInput, leds, warnings };
+    const netKind = new Map<string, NetKind>();
+    for (const [id, n] of nets) {
+      netKind.set(id, n.hasSupplyHigh ? "power" : n.hasSupplyLow ? "ground" : "signal");
+    }
+
+    return { netOf, levels, gpioInput, leds, netKind, warnings };
   }
 
   /** Write the circuit-side level of every GPIO into the shared pin buffer. */
