@@ -1,4 +1,4 @@
-import type { SimHal } from "@esp32-sim/sim-core";
+import { WIFI_IP, type SimHal } from "@esp32-sim/sim-core";
 import { PRELUDE } from "./prelude";
 import { PYTHON_BLOCK, lockdownGlobals } from "./lockdown";
 import { USER_FILE, parseTraceback, type PythonErrorInfo } from "./traceback";
@@ -73,6 +73,38 @@ function makeHalModule(hal: SimHal) {
       return r ? `${r.temperature},${r.humidity}` : "";
     },
     pulse_in: (pin: number, level: number, timeoutUs: number) => hal.pulseIn(pin, level, timeoutUs),
+    wifi_begin: (ssid: string) => hal.wifiBegin(ssid),
+    wifi_status: () => hal.wifiStatus(),
+    wifi_disconnect: () => hal.wifiDisconnect(),
+    wifi_ssid: () => hal.wifiSsid(),
+    wifi_ip: () => WIFI_IP,
+    mqtt_connect: (host: string, port: number, clientId: string, user: string, pass: string, keepalive: number) => {
+      const net = hal.net;
+      if (!net) return 1;
+      const r = net.mqttConnect({ host, port, clientId, username: user || undefined, password: pass || undefined, keepalive });
+      return r.ok ? 0 : 5; // 5 = not authorized / refused, like a CONNACK return code
+    },
+    mqtt_connected: () => hal.net?.mqttConnected() ?? false,
+    mqtt_publish: (topicHex: string, payloadHex: string, retain: boolean, qos: number) =>
+      hal.net?.mqttPublish(new TextDecoder().decode(fromHex(topicHex)), fromHex(payloadHex), retain, qos) ?? false,
+    mqtt_subscribe: (topicHex: string, qos: number) => hal.net?.mqttSubscribe(new TextDecoder().decode(fromHex(topicHex)), qos) ?? false,
+    mqtt_disconnect: () => hal.net?.mqttDisconnect(),
+    mqtt_poll: () => {
+      const m = hal.net?.mqttPoll();
+      return m ? `${toHex(new TextEncoder().encode(m.topic))}:${toHex(m.payload)}` : "";
+    },
+    http: (method: string, url: string, headersJson: string, body: string, timeoutMs: number) => {
+      const net = hal.net;
+      if (!net) return JSON.stringify({ error: "no network" });
+      let headers: Record<string, string> = {};
+      try {
+        headers = JSON.parse(headersJson);
+      } catch {
+        /* ignore malformed headers */
+      }
+      const r = net.httpRequest({ method, url, headers, body: body || undefined, timeoutMs });
+      return JSON.stringify(r.error ? { error: r.error } : { status: r.status, body: r.body });
+    },
     /** Sleep, returning early when an interrupt/timer is pending so Python can run its handler. */
     delay_ms: (ms: number) => hal.delay(ms, () => pending.length > 0),
   };

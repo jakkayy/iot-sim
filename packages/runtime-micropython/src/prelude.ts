@@ -510,6 +510,202 @@ i2c_lcd = _NS()
 i2c_lcd.I2cLcd = I2cLcd
 sys.modules['i2c_lcd'] = i2c_lcd
 
+import json
+
+class _WLAN:
+    def __init__(self, iface):
+        self._iface = iface
+        self._active = False
+
+    def active(self, is_active=None):
+        if is_active is None:
+            return self._active
+        self._active = bool(is_active)
+        return self._active
+
+    def connect(self, ssid=None, key=None, *args, **kwargs):
+        if not self._active:
+            raise OSError('Wifi Unknown Error 0x0102')
+        _hal.wifi_begin(ssid or '')
+
+    def disconnect(self):
+        _hal.wifi_disconnect()
+
+    def isconnected(self):
+        return self._iface == 0 and _hal.wifi_status() == 'connected'
+
+    def status(self):
+        st = _hal.wifi_status()
+        if st == 'connected':
+            return 1010
+        if st == 'connecting':
+            return 1001
+        if st == 'failed':
+            return 201
+        return 1000
+
+    def ifconfig(self, config=None):
+        if self.isconnected():
+            return (_hal.wifi_ip(), '255.255.255.0', '192.168.1.1', '8.8.8.8')
+        return ('0.0.0.0', '0.0.0.0', '0.0.0.0', '0.0.0.0')
+
+    def scan(self):
+        return [(b'simulated-wifi', b'\x00\x11\x22\x33\x44\x55', 6, -45, 3, False)]
+
+    def config(self, *args, **kwargs):
+        if args and args[0] == 'mac':
+            return b'\x24\x6f\x28\x00\x00\x01'
+        if args and args[0] == 'ssid':
+            return _hal.wifi_ssid()
+
+network = _NS()
+network.STA_IF = 0
+network.AP_IF = 1
+network.STAT_IDLE = 1000
+network.STAT_CONNECTING = 1001
+network.STAT_GOT_IP = 1010
+network.STAT_NO_AP_FOUND = 201
+network.WLAN = _WLAN
+network.hostname = lambda name=None: 'esp32'
+sys.modules['network'] = network
+
+class MQTTException(Exception):
+    pass
+
+def _need_wifi():
+    if _hal.wifi_status() != 'connected':
+        raise OSError(113)
+
+class MQTTClient:
+    def __init__(self, client_id, server, port=0, user=None, password=None, keepalive=0, ssl=None, ssl_params={}):
+        self.client_id = client_id
+        self.server = server
+        self.port = port if port else 1883
+        self.user = user
+        self.pswd = password
+        self.keepalive = keepalive
+        self.cb = None
+        self._up = False
+
+    def set_callback(self, f):
+        self.cb = f
+
+    def set_last_will(self, topic, msg, retain=False, qos=0):
+        pass
+
+    def connect(self, clean_session=True):
+        _need_wifi()
+        rc = _hal.mqtt_connect(self.server, self.port, self.client_id, self.user or '', self.pswd or '', self.keepalive)
+        if rc != 0:
+            raise MQTTException(rc)
+        self._up = True
+        return False
+
+    def disconnect(self):
+        _hal.mqtt_disconnect()
+        self._up = False
+
+    def ping(self):
+        pass
+
+    def publish(self, topic, msg, retain=False, qos=0):
+        if not _hal.mqtt_connected():
+            raise OSError(104)
+        if isinstance(topic, str):
+            topic = topic.encode()
+        if isinstance(msg, str):
+            msg = msg.encode()
+        _hal.mqtt_publish(_hex(topic), _hex(msg), bool(retain), qos)
+
+    def subscribe(self, topic, qos=0):
+        if not _hal.mqtt_connected():
+            raise OSError(104)
+        if isinstance(topic, str):
+            topic = topic.encode()
+        if not _hal.mqtt_subscribe(_hex(topic), qos):
+            raise MQTTException(128)
+
+    def _deliver(self):
+        r = _hal.mqtt_poll()
+        if not r:
+            return False
+        t, m = r.split(':')
+        if self.cb:
+            self.cb(binascii.unhexlify(t), binascii.unhexlify(m))
+        return True
+
+    def check_msg(self, attempts=2):
+        _dispatch()
+        return self._deliver()
+
+    def wait_msg(self):
+        while not self._deliver():
+            _sleep(10)
+
+mqtt_simple = _NS()
+mqtt_simple.MQTTClient = MQTTClient
+mqtt_simple.MQTTException = MQTTException
+umqtt = _NS()
+umqtt.simple = mqtt_simple
+sys.modules['umqtt'] = umqtt
+sys.modules['umqtt.simple'] = mqtt_simple
+
+class _Response:
+    def __init__(self, status, body):
+        self.status_code = status
+        self.reason = b'OK' if 200 <= status < 300 else b'Error'
+        self._body = body
+
+    @property
+    def content(self):
+        return self._body.encode()
+
+    @property
+    def text(self):
+        return self._body
+
+    def json(self):
+        return json.loads(self._body)
+
+    def close(self):
+        pass
+
+def _request(method, url, data=None, json_data=None, headers={}, timeout=10):
+    _need_wifi()
+    h = dict(headers)
+    body = ''
+    if json_data is not None:
+        body = json.dumps(json_data)
+        h['Content-Type'] = 'application/json'
+    elif data is not None:
+        body = data if isinstance(data, str) else bytes(data).decode()
+    r = _hal.http(method, url, json.dumps(h), body, int(timeout * 1000))
+    res = json.loads(r)
+    if res.get('error'):
+        raise OSError(res['error'])
+    return _Response(res['status'], res['body'])
+
+def _get(url, headers={}, timeout=10):
+    return _request('GET', url, None, None, headers, timeout)
+
+def _post(url, data=None, json=None, headers={}, timeout=10):
+    return _request('POST', url, data, json, headers, timeout)
+
+def _put(url, data=None, json=None, headers={}, timeout=10):
+    return _request('PUT', url, data, json, headers, timeout)
+
+def _delete(url, headers={}, timeout=10):
+    return _request('DELETE', url, None, None, headers, timeout)
+
+requests = _NS()
+requests.get = _get
+requests.post = _post
+requests.put = _put
+requests.delete = _delete
+requests.request = lambda method, url, data=None, json=None, headers={}, timeout=10: _request(method, url, data, json, headers, timeout)
+sys.modules['urequests'] = requests
+sys.modules['requests'] = requests
+
 class _Time:
     def __getattr__(self, name):
         return getattr(_time, name)
