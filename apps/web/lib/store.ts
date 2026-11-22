@@ -39,6 +39,14 @@ function seedValues(components: { id: string; type: string }[], values: ControlV
   return next;
 }
 
+/** What undo/redo restores. Control values and selection are deliberately not part of history. */
+export interface Snapshot {
+  components: PlacedView[];
+  wires: Wire[];
+}
+
+const HISTORY_LIMIT = 100;
+
 export interface CircuitStore {
   components: PlacedView[];
   wires: Wire[];
@@ -47,6 +55,14 @@ export interface CircuitStore {
   pendingWire: Endpoint | null;
   /** Slider/toggle values per component id. */
   values: ControlValues;
+  past: Snapshot[];
+  future: Snapshot[];
+
+  /** Remember the current circuit so the next change can be undone. Call before a drag starts. */
+  commit(): void;
+  undo(): void;
+  redo(): void;
+  clearHistory(): void;
 
   setValue(id: string, control: string, value: number): void;
   addComponent(type: string, x: number, y: number): string;
@@ -79,6 +95,49 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
   selection: null,
   pendingWire: null,
   values: {},
+  past: [],
+  future: [],
+
+  commit() {
+    set((s) => ({
+      past: [...s.past, { components: s.components, wires: s.wires }].slice(-HISTORY_LIMIT),
+      future: [],
+    }));
+  },
+
+  undo() {
+    const { past, components, wires, values } = get();
+    const prev = past.at(-1);
+    if (!prev) return;
+    set((s) => ({
+      past: past.slice(0, -1),
+      future: [...s.future, { components, wires }],
+      components: prev.components,
+      wires: prev.wires,
+      values: seedValues(prev.components, values),
+      selection: null,
+      pendingWire: null,
+    }));
+  },
+
+  redo() {
+    const { future, components, wires, values } = get();
+    const next = future.at(-1);
+    if (!next) return;
+    set((s) => ({
+      future: future.slice(0, -1),
+      past: [...s.past, { components, wires }],
+      components: next.components,
+      wires: next.wires,
+      values: seedValues(next.components, values),
+      selection: null,
+      pendingWire: null,
+    }));
+  },
+
+  clearHistory() {
+    set({ past: [], future: [] });
+  },
 
   setValue(id, control, value) {
     set((s) => ({ values: { ...s.values, [id]: { ...s.values[id], [control]: value } } }));
@@ -92,6 +151,7 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
       if (existing) return existing.id;
     }
     const id = nextId(components, type);
+    get().commit();
     set((s) => ({
       components: [...components, { id, type, x, y }],
       values: { ...s.values, [id]: defaultValues(devices[type]?.controls) },
@@ -110,6 +170,7 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
   removeSelected() {
     const { selection, components, wires } = get();
     if (!selection) return;
+    get().commit();
     if (selection.kind === "wire") {
       set({ wires: wires.filter((w) => w.id !== selection.id), selection: null });
     } else {
@@ -142,6 +203,7 @@ export const useCircuit = create<CircuitStore>((set, get) => ({
     let n = wires.length + 1;
     const ids = new Set(wires.map((w) => w.id));
     while (ids.has(`w${n}`)) n++;
+    get().commit();
     set({ wires: [...wires, { id: `w${n}`, a: pendingWire, b: endpoint }], pendingWire: null });
     return true;
   },

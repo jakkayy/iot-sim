@@ -10,7 +10,9 @@ import { CodeEditor, type EditorMarker } from "../../components/CodeEditor";
 import { Library } from "../../components/Library";
 import { SerialMonitor } from "../../components/SerialMonitor";
 import { Warnings } from "../../components/Warnings";
-import { useProject, type Lang } from "../../lib/project";
+import { download, exportFiles, makeZip } from "../../lib/export";
+import { createAutosaver, dexieStorage, parseProject, PROJECT_VERSION, type SavedProject } from "../../lib/persist";
+import { DEFAULT_INO, DEFAULT_PY, useProject, type Lang } from "../../lib/project";
 import { SerialLog } from "../../lib/serial";
 import { TEMPLATES } from "../../lib/templates";
 import { useCircuit } from "../../lib/store";
@@ -52,10 +54,57 @@ export default function SimPage() {
       (window as unknown as { __sim: unknown }).__sim = { useProject, useCircuit };
     }
   }, []);
+  // Restore the last project from IndexedDB (or start with a board), then autosave every change.
   useEffect(() => {
-    if (useCircuit.getState().components.length === 0) {
-      useCircuit.getState().addComponent("esp32-devkit", 60, 20);
-    }
+    let cancelled = false;
+    let cleanup = () => {};
+    (async () => {
+      const storage = dexieStorage();
+      let saved = null;
+      try {
+        saved = parseProject(await storage.load());
+      } catch {
+        /* private mode / blocked storage: start fresh */
+      }
+      if (cancelled) return;
+      const circuit = useCircuit.getState();
+      if (saved && saved.components.length > 0) {
+        circuit.load(saved.components, saved.wires, saved.values);
+        useProject.setState({
+          lang: saved.lang,
+          code: { py: saved.code.py || DEFAULT_PY, ino: saved.code.ino || DEFAULT_INO },
+        });
+      } else if (circuit.components.length === 0) {
+        circuit.addComponent("esp32-devkit", 60, 20);
+      }
+      useCircuit.getState().clearHistory();
+
+      const snapshot = (): SavedProject => {
+        const c = useCircuit.getState();
+        const p = useProject.getState();
+        return {
+          version: PROJECT_VERSION,
+          components: c.components,
+          wires: c.wires,
+          values: c.values,
+          lang: p.lang,
+          code: p.code,
+        };
+      };
+      const saver = createAutosaver(storage, snapshot, 500, (e) => console.warn("autosave failed", e));
+      const unsubs = [useCircuit.subscribe(() => saver.schedule()), useProject.subscribe(() => saver.schedule())];
+      const onHide = () => saver.flush();
+      window.addEventListener("beforeunload", onHide);
+      cleanup = () => {
+        saver.flush();
+        unsubs.forEach((u) => u());
+        window.removeEventListener("beforeunload", onHide);
+      };
+    })();
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
   }, []);
 
   const onWarnings = useCallback((w: CircuitWarning[]) => setWarnings(w), []);
@@ -65,6 +114,21 @@ export default function SimPage() {
     setMarkers([]);
     const circuit = new Circuit(useCircuit.getState().toCircuitData(), catalog);
     runner.start(lang, code[lang], buildTopology(circuit), useCircuit.getState().values);
+  };
+
+  const exportProject = () => {
+    const c = useCircuit.getState();
+    const p = useProject.getState();
+    const circuit = c.toCircuitData();
+    const project: SavedProject = {
+      version: PROJECT_VERSION,
+      components: c.components,
+      wires: c.wires,
+      values: c.values,
+      lang: p.lang,
+      code: p.code,
+    };
+    download("esp32-project.zip", makeZip(exportFiles({ lang: p.lang, code: p.code[p.lang], circuit, project })));
   };
 
   const btn =
@@ -118,6 +182,7 @@ export default function SimPage() {
           onChange={(e) => {
             const t = TEMPLATES.find((x) => x.id === e.target.value);
             if (!t) return;
+            useCircuit.getState().commit();
             useCircuit.getState().load(t.components, t.wires, t.values);
             setCode("py", t.code.py);
             serial.clear();
@@ -131,6 +196,15 @@ export default function SimPage() {
             </option>
           ))}
         </select>
+        <button className={btn} onClick={() => useCircuit.getState().undo()} aria-label="Undo" title="Undo (Ctrl+Z)">
+          ↶
+        </button>
+        <button className={btn} onClick={() => useCircuit.getState().redo()} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+          ↷
+        </button>
+        <button className={btn} onClick={exportProject} data-testid="export" title="Download main.py + wiring table">
+          Export to board
+        </button>
         <span className="ml-auto text-xs text-gray-500" data-testid="status">
           {runner.state} · isolated: {String(isolated)}
         </span>

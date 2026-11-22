@@ -117,6 +117,40 @@ try {
   await page.click("[data-testid=run]");
   ok("unpowered DHT22 raises a timeout error", await waitSerial("OSError"), (await serial()).join("|"));
 
+  // --- undo / redo
+  await page.selectOption("[aria-label='Template']", "blink");
+  await page.locator("[data-component=r1] rect").first().click();
+  await page.keyboard.press("Delete");
+  ok("delete removes the resistor", (await page.locator("[data-component=r1]").count()) === 0);
+  await page.click("[aria-label=Undo]");
+  ok("undo button brings the resistor and its wires back", (await page.locator("[data-component=r1]").count()) === 1 && (await page.locator("[data-wire]").count()) === 3);
+  await page.click("[aria-label=Redo]");
+  ok("redo removes it again", (await page.locator("[data-component=r1]").count()) === 0);
+  await page.locator("[data-testid=canvas]").click({ position: { x: 300, y: 520 } });
+  await page.keyboard.press("Control+z");
+  ok("Ctrl+Z undoes too", (await page.locator("[data-component=r1]").count()) === 1);
+
+  // --- export: zip with main.py, wiring.md, project.json
+  await page.selectOption("[aria-label='Template']", "button");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("[data-testid=export]")]);
+  const path = await dl.path();
+  const { execFileSync } = await import("node:child_process");
+  const listing = execFileSync("unzip", ["-l", path]).toString();
+  ok("export zip lists main.py, wiring.md and project.json", ["main.py", "wiring.md", "project.json"].every((n) => listing.includes(n)), listing);
+  ok("export zip passes unzip -t", execFileSync("unzip", ["-t", path]).toString().includes("No errors detected"));
+  const wiring = execFileSync("unzip", ["-p", path, "wiring.md"]).toString();
+  ok("wiring table maps the button to GPIO4", /btn1 \(Push button\) \| 1 \| GPIO4/.test(wiring), wiring.split("\n").filter((l) => l.includes("btn1")).join(" / "));
+
+  // --- autosave: reload restores circuit and code
+  await page.selectOption("[aria-label='Template']", "dht22-oled");
+  await page.waitForTimeout(900);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".monaco-editor");
+  await page.waitForSelector("[data-component=oled1]", { timeout: 5000 }).catch(() => {});
+  ok("reload restores the circuit", (await page.locator("[data-component=oled1]").count()) === 1);
+  const restoredCode = await page.evaluate(() => window.__sim.useProject.getState().code.py);
+  ok("reload restores the program", restoredCode.includes("SSD1306_I2C"));
+
   ok("no page errors", errors.length === 0, errors.join(" | "));
 } finally {
   await browser.close();

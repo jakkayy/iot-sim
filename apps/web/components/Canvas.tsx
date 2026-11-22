@@ -113,6 +113,18 @@ export function Canvas({
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) store.getState().redo();
+        else store.getState().undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        store.getState().redo();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") store.getState().removeSelected();
       if (e.key === "Escape") {
         store.getState().cancelWire();
@@ -226,6 +238,7 @@ export function Canvas({
                   e.stopPropagation();
                   store.getState().select({ kind: "component", id: c.id });
                   const w = toWorld(e.clientX, e.clientY);
+                  store.getState().commit(); // the whole drag is one undo step
                   interaction.current = { kind: "drag", id: c.id, dx: w.x - c.x, dy: w.y - c.y };
                   svgRef.current!.setPointerCapture(e.pointerId);
                 }}
