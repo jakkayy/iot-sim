@@ -1,4 +1,4 @@
-import { PinMode, type SimHal } from "@esp32-sim/sim-core";
+import { PinMode, WIFI_IP, type SimHal } from "@esp32-sim/sim-core";
 
 export interface Sketch {
   setup(): void;
@@ -88,6 +88,24 @@ export async function loadSketch(wasm: BufferSource, hal: SimHal, io: SketchIO =
     }
   };
   const bytes = (ptr: number, len: number) => new Uint8Array(memory.buffer, ptr, len);
+  const cstr = (ptr: number) => {
+    if (!ptr) return "";
+    const mem = new Uint8Array(memory.buffer);
+    let end = ptr;
+    while (mem[end]) end++;
+    return decoder.decode(mem.subarray(ptr, end));
+  };
+  /** Copy `data` into a C buffer of `cap` bytes, always NUL-terminated; returns bytes copied. */
+  const putBytes = (ptr: number, cap: number, data: Uint8Array) => {
+    if (cap <= 0) return 0;
+    const n = Math.min(data.length, cap - 1);
+    const mem = new Uint8Array(memory.buffer);
+    mem.set(data.subarray(0, n), ptr);
+    mem[ptr + n] = 0;
+    return n;
+  };
+  const encoder = new TextEncoder();
+  const WIFI_CODE = { idle: 0, connecting: 0, connected: 2, failed: 3 } as const;
 
   const env: Record<string, (...args: number[]) => number | void> = {
     pinMode: (pin, mode) => hal.pinMode(pin, toSimMode(mode)),
@@ -137,6 +155,52 @@ export async function loadSketch(wasm: BufferSource, hal: SimHal, io: SketchIO =
       return kind === 11 ? Math.trunc(v) : v;
     },
     simMath: (fn, a, b) => (MATH[fn] ?? (() => NaN))(a, b),
+
+    // --- Wi-Fi, MQTT, HTTP ---------------------------------------------------
+    simWifiBegin: (ssid) => hal.wifiBegin(cstr(ssid)),
+    simWifiStatus: () => WIFI_CODE[hal.wifiStatus()],
+    simWifiDisconnect: () => hal.wifiDisconnect(),
+    simWifiLocalIp: (ptr, cap) => void putBytes(ptr, cap, encoder.encode(WIFI_IP)),
+    simMqttConnect: (host, port, id, user, pass, keepalive) => {
+      if (!hal.net || hal.wifiStatus() !== "connected") return 1;
+      const r = hal.net.mqttConnect({
+        host: cstr(host),
+        port,
+        clientId: cstr(id),
+        username: cstr(user) || undefined,
+        password: cstr(pass) || undefined,
+        keepalive,
+      });
+      return r.ok ? 0 : 5;
+    },
+    simMqttConnected: () => (hal.net?.mqttConnected() ? 1 : 0),
+    simMqttPublish: (topic, ptr, len, retain, qos) =>
+      hal.net?.mqttPublish(cstr(topic), bytes(ptr, len).slice(), !!retain, qos) ? 1 : 0,
+    simMqttSubscribe: (topic, qos) => (hal.net?.mqttSubscribe(cstr(topic), qos) ? 1 : 0),
+    simMqttPoll: (tbuf, tcap, pbuf, pcap) => {
+      const m = hal.net?.mqttPoll();
+      if (!m) return -1;
+      putBytes(tbuf, tcap, encoder.encode(m.topic));
+      return putBytes(pbuf, pcap, m.payload);
+    },
+    simMqttDisconnect: () => hal.net?.mqttDisconnect(),
+    simHttp: (method, url, headers, body, bodyLen, out, outCap) => {
+      if (!hal.net || hal.wifiStatus() !== "connected") return -1;
+      const hs: Record<string, string> = {};
+      for (const line of cstr(headers).split("\n")) {
+        const i = line.indexOf(":");
+        if (i > 0) hs[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      }
+      const r = hal.net.httpRequest({
+        method: cstr(method),
+        url: cstr(url),
+        headers: hs,
+        body: bodyLen ? decoder.decode(bytes(body, bodyLen).slice()) : undefined,
+      });
+      if (r.error || r.status <= 0) return -1;
+      putBytes(out, outCap, encoder.encode(r.body));
+      return r.status;
+    },
   };
 
   const missing = WebAssembly.Module.imports(module)

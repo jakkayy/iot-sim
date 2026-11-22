@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "Printable.h"
 
 size_t Print::write(const uint8_t *buf, size_t size) {
   size_t n = 0;
@@ -94,3 +95,6 @@ size_t Print::printf(const char *fmt, ...) {
   free(big);
   return n;
 }
+
+size_t Print::print(const Printable &p) { return p.printTo(*this); }
+size_t Print::println(const Printable &p) { return print(p) + println(); }

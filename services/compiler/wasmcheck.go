@@ -17,6 +17,9 @@ var allowedImports = map[string]bool{
 	"simTone": true, "simPulseIn": true, "simAttachInterrupt": true, "simDetachInterrupt": true,
 	"simI2cBegin": true, "simI2cWrite": true, "simI2cRead": true, "simSensorRead": true,
 	"simMath": true,
+	"simWifiBegin": true, "simWifiStatus": true, "simWifiDisconnect": true, "simWifiLocalIp": true,
+	"simMqttConnect": true, "simMqttConnected": true, "simMqttPublish": true, "simMqttSubscribe": true,
+	"simMqttPoll": true, "simMqttDisconnect": true, "simHttp": true,
 }
 
 func readULEB(b []byte, p int) (uint64, int, error) {

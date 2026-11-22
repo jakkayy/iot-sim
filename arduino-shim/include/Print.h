@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 class String;
+class Printable;
 
 class Print {
  public:
@@ -23,6 +24,7 @@ class Print {
   size_t print(unsigned long long v, int base = 10);
   size_t print(double v, int digits = 2);
   size_t print(const String &s);
+  size_t print(const Printable &p);
 
   size_t println(void);
   size_t println(const char *s);
@@ -36,6 +38,7 @@ class Print {
   size_t println(unsigned long long v, int base = 10);
   size_t println(double v, int digits = 2);
   size_t println(const String &s);
+  size_t println(const Printable &p);
 
   size_t printf(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 

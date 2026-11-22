@@ -106,6 +106,17 @@ SIM_IMPORT(simI2cWrite) int simI2cWrite(uint8_t addr, const uint8_t *data, size_
 SIM_IMPORT(simI2cRead) int simI2cRead(uint8_t addr, uint8_t *data, size_t len);
 SIM_IMPORT(simSensorRead) double simSensorRead(uint8_t kind, uint8_t pin, uint8_t which);
 SIM_IMPORT(simMath) double simMath(uint8_t fn, double a, double b);
+SIM_IMPORT(simWifiBegin) void simWifiBegin(const char *ssid);
+SIM_IMPORT(simWifiStatus) int simWifiStatus(void);
+SIM_IMPORT(simWifiDisconnect) void simWifiDisconnect(void);
+SIM_IMPORT(simWifiLocalIp) void simWifiLocalIp(char *buf, size_t cap);
+SIM_IMPORT(simMqttConnect) int simMqttConnect(const char *host, uint16_t port, const char *clientId, const char *user, const char *pass, uint16_t keepalive);
+SIM_IMPORT(simMqttConnected) int simMqttConnected(void);
+SIM_IMPORT(simMqttPublish) int simMqttPublish(const char *topic, const uint8_t *payload, size_t len, int retain, int qos);
+SIM_IMPORT(simMqttSubscribe) int simMqttSubscribe(const char *topic, int qos);
+SIM_IMPORT(simMqttPoll) int simMqttPoll(char *topicBuf, size_t topicCap, uint8_t *payloadBuf, size_t payloadCap);
+SIM_IMPORT(simMqttDisconnect) void simMqttDisconnect(void);
+SIM_IMPORT(simHttp) int simHttp(const char *method, const char *url, const char *headers, const uint8_t *body, size_t bodyLen, char *out, size_t outCap);
 
 #ifdef __cplusplus
 }
@@ -114,6 +125,7 @@ SIM_IMPORT(simMath) double simMath(uint8_t fn, double a, double b);
 #ifdef __cplusplus
 #include "WString.h"
 #include "Print.h"
+#include "Printable.h"
 #include "HardwareSerial.h"
 
 void delay(uint32_t ms);
