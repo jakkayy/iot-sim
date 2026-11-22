@@ -1,12 +1,10 @@
 #!/bin/sh
-# Compile Arduino C++ sources to a simulator wasm. This is the single place that
-# owns the clang flags: the dev helper and the sandbox image both call it.
+# Compile Arduino C++ sources to a simulator wasm.
 #   usage: compile.sh <out.wasm> <source files...>      (env SHIM=/shim)
 set -eu
-SHIM="${SHIM:-/shim}"
+. "$(dirname "$0")/flags.sh"
 OUT="$1"
 shift
-RES="$(clang -print-resource-dir)"
 LIB=""
 SHIM_SRCS=""
 if [ -f "$SHIM/lib/libshim.a" ]; then
@@ -14,11 +12,8 @@ if [ -f "$SHIM/lib/libshim.a" ]; then
 else
   SHIM_SRCS="$(ls "$SHIM"/src/*.cpp)"
 fi
-exec clang++ --target=wasm32 -O2 -std=c++17 \
-  -ffreestanding -nostdlib -nostdinc -nostdinc++ \
-  -isystem "$SHIM/include" -isystem "$RES/include" \
-  -fno-exceptions -fno-rtti -fno-threadsafe-statics -mbulk-memory \
-  -Wall -Wno-unused-function -Wno-unknown-pragmas \
+# shellcheck disable=SC2086
+exec clang++ $SHIM_CXXFLAGS \
   -Wl,--no-entry -Wl,--allow-undefined -Wl,--export-memory -Wl,--export-table \
   -Wl,--gc-sections -Wl,--strip-all \
   "$@" $SHIM_SRCS $LIB -o "$OUT"
