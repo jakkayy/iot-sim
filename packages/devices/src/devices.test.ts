@@ -1,19 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import { Circuit, PinMode, PinState, createPinBuffer } from "@esp32-sim/sim-core";
-import { catalog, devices, esp32Devkit, gpioNumber, pinDir, pinHint } from "./index";
+import { catalog, defaultValues, devices, esp32Devkit, gpioNumber, pinDir, pinHint } from "./index";
 
 describe("device definitions", () => {
   test("geometry pins match element pins for every device", () => {
     for (const d of Object.values(devices)) {
       const geo = d.pins.map((p) => p.name).sort();
       const el = d.element;
-      const expected =
+      const expected: string[] =
         el.kind === "board"
           ? Object.keys(el.pins)
           : el.kind === "led"
             ? [el.anode, el.cathode]
-            : [el.a, el.b];
-      expect(geo).toEqual([...expected].sort());
+            : el.kind === "resistor" || el.kind === "switch"
+              ? [el.a, el.b]
+              : el.kind === "rgb-led"
+                ? [el.r, el.g, el.b, el.common]
+                : el.kind === "buzzer"
+                  ? [el.pos, el.neg]
+                  : el.kind === "relay"
+                    ? [el.vcc, el.gnd, el.in, el.com, el.no, el.nc]
+                    : el.kind === "analog-out" || el.kind === "digital-out"
+                      ? [el.vcc, el.gnd, el.out]
+                      : el.kind === "servo"
+                        ? [el.vcc, el.gnd, el.sig]
+                        : el.pins;
+      expect(geo, d.type).toEqual([...expected].sort());
     }
   });
 
@@ -28,6 +40,41 @@ describe("device definitions", () => {
     expect(pinHint("GPIO32").join()).toContain("ADC1");
     expect(pinHint("GPIO4").join()).toContain("ADC2");
     expect(pinHint("5V").join()).toContain("never");
+  });
+});
+
+describe("round-2 device catalog", () => {
+  test("every plan device exists", () => {
+    for (const t of [
+      "potentiometer", "buzzer", "relay", "rgb-led", "dht22", "pir", "ldr",
+      "hcsr04", "servo", "ssd1306", "lcd-i2c",
+    ]) {
+      expect(devices[t], t).toBeDefined();
+    }
+  });
+
+  test("controls have sane defaults inside their range", () => {
+    for (const d of Object.values(devices)) {
+      for (const c of d.controls ?? []) {
+        if (c.kind === "slider") {
+          expect(c.default).toBeGreaterThanOrEqual(c.min);
+          expect(c.default).toBeLessThanOrEqual(c.max);
+        }
+      }
+    }
+    expect(defaultValues(devices.dht22.controls)).toEqual({ temperature: 25, humidity: 50 });
+    expect(defaultValues(devices.button.controls)).toEqual({});
+  });
+
+  test("every pin sits on the device boundary or inside its box", () => {
+    for (const d of Object.values(devices)) {
+      for (const p of d.pins) {
+        expect(p.x, `${d.type}:${p.name}`).toBeGreaterThanOrEqual(0);
+        expect(p.x, `${d.type}:${p.name}`).toBeLessThanOrEqual(d.width);
+        expect(p.y, `${d.type}:${p.name}`).toBeGreaterThanOrEqual(0);
+        expect(p.y, `${d.type}:${p.name}`).toBeLessThanOrEqual(d.height);
+      }
+    }
   });
 });
 
