@@ -224,3 +224,46 @@ describe("SimHal I2C and sensors", () => {
     expect(hal.pulseIn(20, 1, 30000)).toBe(-2);
   });
 });
+
+describe("SimHal Wi-Fi and ADC2", () => {
+  test("association takes virtual time and succeeds by default", () => {
+    const { hal } = setup();
+    expect(hal.wifiStatus()).toBe("idle");
+    hal.wifiBegin("home");
+    expect(hal.wifiStatus()).toBe("connecting");
+    hal.delay(1600);
+    expect(hal.wifiStatus()).toBe("connected");
+    expect(hal.wifiSsid()).toBe("home");
+    hal.wifiDisconnect();
+    expect(hal.wifiStatus()).toBe("idle");
+  });
+
+  test("an empty SSID fails", () => {
+    const { hal } = setup();
+    hal.wifiBegin("");
+    hal.delay(1600);
+    expect(hal.wifiStatus()).toBe("failed");
+  });
+
+  test("ADC2 reads 0 with a one-time warning while Wi-Fi is up; ADC1 is fine", () => {
+    let t = 0;
+    const warns: string[] = [];
+    const pins = new PinState(createPinBuffer());
+    const hal = new SimHal({
+      pins,
+      clock: new VirtualClock(createClockBuffer(), () => t, true),
+      sleep: (ms) => (t += ms),
+      onWarn: (w) => warns.push(w),
+    });
+    pins.set(4, PinField.Analog, 3000);
+    pins.set(32, PinField.Analog, 3000);
+    expect(hal.analogRead(4)).toBe(3000); // Wi-Fi off: fine
+    hal.wifiBegin("home");
+    hal.delay(1600);
+    expect(hal.analogRead(4)).toBe(0);
+    expect(hal.analogRead(4)).toBe(0);
+    expect(hal.analogRead(32)).toBe(3000);
+    expect(warns.length).toBe(1);
+    expect(warns[0]).toContain("GPIO4");
+  });
+});

@@ -7,6 +7,7 @@
 import { PinField, PinMode, PinState } from "./pins";
 import { VirtualClock } from "./clock";
 import type { I2CSlave, SensorModel } from "./i2c";
+import type { WorkerNet } from "./net";
 
 export type Edge = "rising" | "falling" | "change";
 
@@ -15,7 +16,20 @@ export interface HalOptions {
   clock: VirtualClock;
   /** Block up to `realMs`, returning early if woken. Default: PinState.waitWake. Injected in tests. */
   sleep?: (realMs: number) => void;
+  /** Network bridge to the UI thread (MQTT, HTTP). Absent in tests that do not need it. */
+  net?: WorkerNet;
+  /** One-line warnings for the user (shown in the serial monitor). */
+  onWarn?: (text: string) => void;
 }
+
+export type WifiStatus = "idle" | "connecting" | "connected" | "failed";
+
+/** How long a simulated Wi-Fi association takes (virtual ms). */
+export const WIFI_CONNECT_MS = 1500;
+export const WIFI_IP = "192.168.1.50";
+
+/** ADC2 shares hardware with Wi-Fi on the ESP32 and cannot be read while Wi-Fi is on. */
+export const ADC2_GPIOS: ReadonlySet<number> = new Set([0, 2, 4, 12, 13, 14, 15, 25, 26, 27]);
 
 interface Irq {
   edge: Edge;
@@ -39,6 +53,10 @@ export class SimHal {
   private readonly irqs = new Map<number, Irq>();
   private readonly timers = new Map<number, TimerEntry>();
   private polling = false;
+  readonly net?: WorkerNet;
+  private readonly onWarn: (text: string) => void;
+  private wifi: { ssid: string; readyAt: number; fail: boolean } | null = null;
+  private readonly warned = new Set<number>();
   private readonly i2cBuses = new Map<string, I2CSlave[]>();
   private readonly sensors = new Map<string, SensorModel>();
 
@@ -46,6 +64,33 @@ export class SimHal {
     this.pins = opts.pins;
     this.clock = opts.clock;
     this.sleepReal = opts.sleep ?? ((ms) => opts.pins.waitWake(ms));
+    this.net = opts.net;
+    this.onWarn = opts.onWarn ?? (() => {});
+  }
+
+  // --- Wi-Fi (simulated) --------------------------------------------------
+  /** Start associating. Succeeds after WIFI_CONNECT_MS unless the user switched on "simulate failure". */
+  wifiBegin(ssid: string): void {
+    this.wifi = {
+      ssid,
+      readyAt: this.clock.nowMs() + WIFI_CONNECT_MS,
+      fail: !ssid || (this.net?.wifiShouldFail() ?? false),
+    };
+  }
+
+  wifiStatus(): WifiStatus {
+    if (!this.wifi) return "idle";
+    if (this.clock.nowMs() < this.wifi.readyAt) return "connecting";
+    return this.wifi.fail ? "failed" : "connected";
+  }
+
+  wifiDisconnect(): void {
+    this.wifi = null;
+    this.net?.mqttDisconnect();
+  }
+
+  wifiSsid(): string {
+    return this.wifi?.ssid ?? "";
   }
 
   // --- GPIO -------------------------------------------------------------
@@ -68,6 +113,13 @@ export class SimHal {
   /** 12-bit ADC value (0..4095). */
   analogRead(pin: number): number {
     this.poll();
+    if (ADC2_GPIOS.has(pin) && this.wifiStatus() === "connected") {
+      if (!this.warned.has(pin)) {
+        this.warned.add(pin);
+        this.onWarn(`warning: GPIO${pin} is on ADC2, which cannot be read while Wi-Fi is on (use an ADC1 pin: 32-39)`);
+      }
+      return 0;
+    }
     return this.pins.get(pin, PinField.Analog);
   }
 
