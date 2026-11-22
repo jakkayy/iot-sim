@@ -55,6 +55,8 @@ typedef bool boolean;
 typedef uint8_t byte;
 typedef unsigned int word;
 
+#define IRAM_ATTR
+#define ICACHE_RAM_ATTR
 #define F(x) (x)
 #define PROGMEM
 #define PSTR(x) (x)

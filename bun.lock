@@ -57,6 +57,7 @@
         "@esp32-sim/sim-core": "workspace:*",
       },
       "devDependencies": {
+        "@esp32-sim/devices": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5.6.0",
       },
